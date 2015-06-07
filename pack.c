@@ -31,7 +31,9 @@
 //#define level 3
 //#define match_level 45
 #define level 5
+//#define level 1
 #define match_level 10000
+//#define match_level 2
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
@@ -176,7 +178,7 @@ obyte=1;
     }
     bits[res++]=2;
   }
-  if (num>=x-total) { 
+  if (num>=x-total) {
     if (num>=(x>>1)) {
       bits[res++]=1; num-=total-(x>>1);
     } else {
@@ -202,9 +204,7 @@ doneit:
   else 
   for(x=0;x<res;x++) {
     putbit(bits[x]);
-//    printf("%c",bits[x]+48);
   }
-//  printf("\n");
 }
 
 int old_ofs=0;
@@ -333,11 +333,11 @@ void init_same(int n) {
   }
   same[i]=-1;
 
-  printf("init_same done.\n");
+  printf("init_same done.\n");
 
   for(i=0;i<n;i++) sorted[i]=i;
 
-  qsort( sorted, n, sizeof( int ),
+  qsort( sorted, n, sizeof( int ),
                ( int (*)(const void *, const void *) ) cmpstrsort );
   printf("qsort done.\n");
 
@@ -353,14 +353,6 @@ void init_same(int n) {
   sorted_next[n-1]=-1;
   in_buf[n]=0;
   
-/*  for(i=0;i<n;i++) {
-    byte c=in_buf[sorted[i]+sorted_len[i]];
-    in_buf[sorted[i]+sorted_len[i]]=0;
-    printf("current=%d, prev=%d,next=%d,len=%d: %s\n",
-    sorted[i],sorted_prev[i],sorted_next[i],sorted_len[i],in_buf+sorted[i]);
-    in_buf[sorted[i]+sorted_len[i]]=c;
-  }
-*/  
   printf("sort done.\n");
 }
 
@@ -559,6 +551,8 @@ if (!notskip) goto done;
     int len_bottom=sorted_len[medium];
 
     while (top>=0 || bottom >=0) {
+      match_check_max--;
+      if (match_check_max==0) goto done;
 //      printf("top=%d, bottom=%d, len_top=%d, len_bottom=%d\n", top, bottom,
 //        len_top, len_bottom);
       if (len_top>len_bottom) {
@@ -588,13 +582,12 @@ if (!notskip) goto done;
         }
       }
 
-      if ((len<left)&&((used-pos<longlen) || (len>2))) {
-        int k;
+      if (len<left) {
+          CHECK_OLZ
+/*        int k;
         int d=level;
         int olen=0;
         tmp+=len_encode_l(len-((used-pos>=longlen)?1:0));
-	match_check_max--;
-	if (match_check_max==0) goto done;
         for(k=len+1;k<left-2;k++) {
           tmp+=9;
           if (best_ofs[used+k]==pos-used) {
@@ -660,7 +653,7 @@ if (!notskip) goto done;
           if (best_ofs[used+k]) {
             d--; if (d==0) break;
           }
-        }
+        }*/
       }      
     }    
 
@@ -698,7 +691,7 @@ done:
     return n;
   };
 
-  /* now we can easily generate compressed stream - will do it later */
+  /* now we can easily generate compressed stream */
   initout();
   for(i=1;i<n;) {
     if (best_len[i]==1) {

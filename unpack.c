@@ -1,6 +1,6 @@
-# test file decompression using LZOMA algoritm
-# (c) Alexandr Efimov, 2015
-# License: GPL v2 or later
+// test file decompression using LZOMA algoritm
+// (c) Alexandr Efimov, 2015
+// License: GPL v2 or later
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -15,9 +15,6 @@ int breaklz;
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
-
-#define likely(x)      __builtin_expect(!!(x), 1)
-#define unlikely(x)    __builtin_expect(!!(x), 0)
 
 #define getbit (1 & (bits = (bits <= 3 ? (0x100|*src++) : (bits>>1))))
 #define loadbit
