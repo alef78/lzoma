@@ -108,7 +108,24 @@ unpack:
 	negl	%edi
 	movl	%edi, 8(%esp)
 .load_len:
-	addl	$2, %ebx
+	addb    %al,%al
+	jnz	.len2b
+	mov	(%edx), %al
+	inc	%edx
+	adcb    %al,%al
+.len2b:
+	jc	.lenlonger
+	addb    %al,%al
+	jnz	.len2b2
+	mov	(%edx), %al
+	inc	%edx
+	adcb    %al,%al
+.len2b2:
+	adcl    $2,%ebx
+	jmp	.copy_match
+
+.lenlonger:
+	addl	$4, %ebx
 	movl	$1, %edi
 	xorl	%ecx, %ecx
 	movl	(%esp), %esi

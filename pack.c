@@ -28,11 +28,11 @@
 //1024
 #define breaklen 4
 // level 5 / match_level 10000 compresses better but many times slower
-//#define level 3
-//#define match_level 45
-#define level 5
+#define level 3
+#define match_level 45
+//#define level 5
 //#define level 1
-#define match_level 10000
+//#define match_level 10000000
 //#define match_level 2
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
@@ -98,25 +98,28 @@ doneit:
 }
 
 static inline int len_encode_l(int num) {//num>=2
-  if (num<4) return 2;// 0 0=2 1=3
-  if (num<8) return 4; // 10 00=4 01=5 10=6 11=7
-  if (num<16) return 6; // 110 xxx 8-15
-  if (num<32) return 8;
-  if (num<64) return 10;
-  if (num<128) return 12;
-  if (num<256) return 14;
-  if (num<512) return 16;
-  if (num<1024) return 18;
-  if (num<2048) return 20;
-  if (num<4096) return 22;
-  if (num<8192) return 24;
-  if (num<16384) return 26;
-  if (num<32768) return 28;
-  if (num<65536) return 30;
-  if (num<131072) return 32;
-  if (num<262144) return 34;
-  if (num<524288) return 36;
-  return 38;
+if (num<4) return 2;// 00 01
+num-=2;
+  //return 1+((31-__builtin_clz(num))<<1);
+  if (num<4) return 1+2;// 0 0=2 1=3
+  if (num<8) return 1+4; // 10 00=4 01=5 10=6 11=7
+  if (num<16) return 1+6; // 110 xxx 8-15
+  if (num<32) return 1+8;
+  if (num<64) return 1+10;
+  if (num<128) return 1+12;
+  if (num<256) return 1+14;
+  if (num<512) return 1+16;
+  if (num<1024) return 1+18;
+  if (num<2048) return 1+20;
+  if (num<4096) return 1+22;
+  if (num<8192) return 1+24;
+  if (num<16384) return 1+26;
+  if (num<32768) return 1+28;
+  if (num<65536) return 1+30;
+  if (num<131072) return 1+32;
+  if (num<262144) return 1+34;
+  if (num<524288) return 1+36;
+  return 1+38;
 }
 
 static inline int len_encode_l_dec(int num) {//num>=2
@@ -229,14 +232,24 @@ static inline void put_lz(int offset,int length,int used,int len_left) {
     was_letter=0;
     if (old_ofs==offset) {
       putbit(0);
-      putenc(length-2,len_left-1,breaklen);
+      length-=2;
+      if (length==0) { putbit(0);putbit(0);}
+      else
+      if (length==1) { putbit(0);putbit(1);}
+      else {putbit(1);
+      putenc(length-2,len_left-1,breaklen);}
       return;
     }
     putbit(1);
   }
   if (offset+1>=longlen) { length--; }
   putenc(offset,used,breaklz);
-  putenc(length-2,len_left-1,breaklen);
+      length-=2;
+      if (length==0) { putbit(0);putbit(0);}
+      else
+      if (length==1) { putbit(0);putbit(1);}
+      else {putbit(1);
+  putenc(length-2,len_left-1,breaklen);}
   old_ofs=offset;
 }
 
@@ -723,11 +736,11 @@ void e8(signed long n) {
   long *op;
   for(i=0; i<n-5;) {
     byte b = in_buf[i];
-//    if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
-//      i++;
-//      b = 0xe8;
-//    }
-//    b &= 0xFE;
+    if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
+      i++;
+      b = 0xe8;
+    }
+    b &= 0xFE;
     i++;  
     if (b == 0xe8) {
        op = (long *)(in_buf+i);

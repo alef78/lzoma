@@ -16,7 +16,8 @@ int breaklz;
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
 
-#define getbit (1 & (bits = (bits <= 3 ? (0x100|*src++) : (bits>>1))))
+//#define getbit (1 & (bits = (bits <= 3 ? (0x100|*src++) : (bits>>1))))
+#define getbit (((bits=bits&0x7f? bits+bits :  (((unsigned)(*src++))<<1)+1)>>8)&1)
 #define loadbit
 
 #define getcode(bits, src, ptotal, pbreak_at) {\
@@ -56,6 +57,11 @@ getcode_doneit: \
   long int res=0;\
   int x=1;\
   \
+  if (getbit==0) {\
+    len+=getbit;\
+    goto getlen_0bit;\
+  }\
+  len+=2;\
   if (total<2) goto getlen_0bit;\
   if (total==2) goto getlen_lastone;\
   while (1) {  \
@@ -79,7 +85,7 @@ getlen_0bit: ;\
 static void unpack_c(byte *src, byte *dst, int left) {
   int ofs=-1;
   int len;
-  int bits=0;
+  int bits=0x80;
   left--;
 
 copyletter:
@@ -147,11 +153,11 @@ void e8back(byte *buf,long n) {
   signed long *op;
   for(i=0; i<n-5;) {
 	byte b = buf[i];
-//    if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
-//      i++;
-//      b = 0xe8;
-//    }
-//    b &= 0xFE;
+    if ((b == 0xF) && (buf[i+1] & 0xF0) == 0x80) {
+      i++;
+      b = 0xe8;
+    }
+    b &= 0xFE;
     i++;
 
     if (b == 0xe8) {
