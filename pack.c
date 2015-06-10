@@ -29,7 +29,7 @@
 #define breaklen 4
 // level 5 / match_level 10000 compresses better but many times slower
 #define level 3
-#define match_level 45
+#define match_level 245
 //#define level 5
 //#define level 1
 //#define match_level 10000000
@@ -561,13 +561,11 @@ if (!notskip) goto done;
     int top=sorted_prev[medium];
     int bottom=sorted_next[medium];
     int len_top=(top>=0) ? sorted_len[top]: 0;
-    int len_bottom=sorted_len[medium];
+    int len_bottom=(bottom >= 0) ? sorted_len[medium]:0;
 
     while (top>=0 || bottom >=0) {
       match_check_max--;
       if (match_check_max==0) goto done;
-//      printf("top=%d, bottom=%d, len_top=%d, len_bottom=%d\n", top, bottom,
-//        len_top, len_bottom);
       if (len_top>len_bottom) {
         pos=sorted[top];
 	len=len_top;
@@ -576,15 +574,14 @@ if (!notskip) goto done;
       } else {
         pos=sorted[bottom];
 	len=len_bottom;
-        len_bottom = min(len_bottom,sorted_len[bottom]);
+        len_bottom = (bottom >= 0) ? min(len_bottom,sorted_len[bottom]):0;
 	bottom=sorted_next[bottom];
       }
-//if (len >= 512) goto done;
       if (used-pos<longlen) continue; // we already checked it
-      if (len==2) goto done;
+      if (len<=2) goto done;
       int tmp=1+len_encode(used-pos-1,used);
-      for(j=(used-pos>=longlen)?3:2;j<=len;j+=cacherle[used+j]) {
-        int tmp2=tmp+len_encode_l(j-((used-pos>=longlen)?1:0));
+      for(j=3;j<=len;j+=cacherle[used+j]) {
+        int tmp2=tmp+len_encode_l(j-1);
         tmp2+=cache[used+j];
         if (tmp2<res) {
           res=tmp2;
@@ -597,76 +594,6 @@ if (!notskip) goto done;
 
       if (len<left) {
           CHECK_OLZ
-/*        int k;
-        int d=level;
-        int olen=0;
-        tmp+=len_encode_l(len-((used-pos>=longlen)?1:0));
-        for(k=len+1;k<left-2;k++) {
-          tmp+=9;
-          if (best_ofs[used+k]==pos-used) {
-            int tmp2=tmp+len_olz_minus_lz(used-pos,best_len[used+k],used+k);
-            tmp2+=cache[used+k];
-            if (tmp2<res) {
-              res=tmp2;
-              my_best_ofs=pos-used;
-              my_best_len=len;
-              my_use_olz=k-len;
-              my_olz_len=best_len[used+k];
-            }
-          }
-          if (olen==0) {
-            olen=cmpstr(used+k,pos+k);
-	    if (olen>=2) {
-              for (j=2;j<=olen;j+=cacherle[used+k+j]) {
-                int tmp2=tmp+2+len_encode_l(j);
-                tmp2+=cache[used+k+j];
-                if (best_len[used+k+j]==1) {
-  		  int jj;
-		  for(jj=1;jj<=8;jj++) {
-                    if (best_len[used+k+j+jj]>1) {
-                      if (best_ofs[used+k+j+jj]==pos-used) {
-                        tmp2+=len_olz_minus_lz(used-pos,best_len[used+k+j+jj],used+k+j+jj);
-                      }
-		      break;
-		    }
-		  }
-		}
-                if (tmp2<res) {
-                  res=tmp2;
-                  my_best_ofs=pos-used;
-                  my_best_len=len;
-                  my_use_olz=k-len;
-                  my_olz_len=j;
-                }
-    	      }
-	      {
-                int tmp2=tmp+2+len_encode_l(olen);
-                tmp2+=cache[used+k+olen];
-                if (best_len[used+k+olen]==1) {
-                  int jj;
-                  for(jj=1;jj<=8;jj++) {
-                    if (best_len[used+k+olen+jj]>1) {
-                      if (best_ofs[used+k+olen+jj]==pos-used) {
-                        tmp2+=len_olz_minus_lz(used-pos,best_len[used+k+olen+jj],used+k+olen+jj);
-                      }
-                      break;
-                    }
-                  }
-		}
-                if (tmp2<res) {
-                  res=tmp2;
-                  my_best_ofs=pos-used;
-                  my_best_len=len;
-                  my_use_olz=k-len;
-                  my_olz_len=olen;
-                }
-	      }
-	    }
-          } else olen--;
-          if (best_ofs[used+k]) {
-            d--; if (d==0) break;
-          }
-        }*/
       }      
     }    
 
