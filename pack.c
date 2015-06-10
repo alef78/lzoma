@@ -259,7 +259,7 @@ static inline void put_letter(byte b) {
   was_letter++;
 }
 
-static inline int len_lz(int offset, int length, int used) { // offset<=-1, length>=2, 
+static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
   int res=1; /* 1 bit = not a letter */
 
@@ -273,7 +273,7 @@ static inline int len_lz(int offset, int length, int used) { // offset<=-1, leng
   return res;
 }
 
-static inline int len_olz_minus_lz(int offset, int length, int used) { // offset<=-1, length>=2, 
+static inline int len_olz_minus_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
   int res=1;
   if (offset>=longlen) { res+=len_encode_l(length)-len_encode_l(length-1); }
@@ -563,6 +563,7 @@ if (!notskip) goto done;
     int len_top=(top>=0) ? sorted_len[top]: 0;
     int len_bottom=(bottom >= 0) ? sorted_len[medium]:0;
 
+    int my_min_ofs=used+1;
     while (top>=0 || bottom >=0) {
       match_check_max--;
       if (match_check_max==0) goto done;
@@ -579,6 +580,8 @@ if (!notskip) goto done;
       }
       if (used-pos<longlen) continue; // we already checked it
       if (len<=2) goto done;
+      if (my_min_ofs>used-pos) {
+      my_min_ofs=used-pos;//we are checking matches in decreasing order. we need to check next matches only if those are shorter
       int tmp=1+len_encode(used-pos-1,used);
       for(j=3;j<=len;j+=cacherle[used+j]) {
         int tmp2=tmp+len_encode_l(j-1);
@@ -590,7 +593,7 @@ if (!notskip) goto done;
           my_use_olz=0;
           my_olz_len=0;
         }
-      }
+      }}
 
       if (len<left) {
           CHECK_OLZ
