@@ -23,7 +23,9 @@
 
 #define byte unsigned char
 #define MAX_SIZE 16384*1024
-#define longlen 0x0D00
+//0x52398c
+// min lz is 1bit+10bits+breakbit+2bitlen=14 bit. 2 chars=18bit
+#define longlen 0x0d00
 #define breaklz 1024
 //1024
 #define breaklen 4
@@ -67,15 +69,10 @@ static inline int len_encode(int num,int total) {
   register int ox;
   int break_at=breaklz;
 
-  if (total>=256) {
-    x=128;
-    res=7;
-    if (total>=512) {
-      x+=x;res++;
-      if (total>=1024) {
-        x+=x;res++;
-      }
-    }
+  if (total>=1024) {
+    if (num<512) return 10;
+    x=512;
+    res=9;
   }
 
   while (1) {
@@ -221,7 +218,9 @@ void initout(void) {
   was_letter=1;
 }
 
-
+int stlet=0;
+int stlz=0;
+int stolz=0;
 static inline void put_lz(int offset,int length,int used,int len_left) {
   putbit(1);
   offset=-offset; /* 1.. */
@@ -231,6 +230,7 @@ static inline void put_lz(int offset,int length,int used,int len_left) {
   if (was_letter) {
     was_letter=0;
     if (old_ofs==offset) {
+    stolz++;
       putbit(0);
       length-=2;
       if (length==0) { putbit(0);putbit(0);}
@@ -242,14 +242,16 @@ static inline void put_lz(int offset,int length,int used,int len_left) {
     }
     putbit(1);
   }
+  stlz++;
   if (offset+1>=longlen) { length--; }
-  putenc(offset,used,breaklz);
       length-=2;
+      putenc(offset,used,breaklz);
       if (length==0) { putbit(0);putbit(0);}
       else
       if (length==1) { putbit(0);putbit(1);}
       else {putbit(1);
   putenc(length-2,len_left-1,breaklen);}
+ 
   old_ofs=offset;
 }
 
@@ -257,6 +259,7 @@ static inline void put_letter(byte b) {
   putbit(0);
   out_buf[outpos++]=b;
   was_letter++;
+  stlet++;
 }
 
 static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
@@ -661,6 +664,30 @@ dolz:
   return outpos;
 }
 
+int dorle(signed long n)
+{
+  long i;
+  byte *out=out_buf;
+  *out++=in_buf[0];
+  for(i=1;i<n;) {
+  //printf("rle i=%d to %d\n",i,out-out_buf);
+    *out++=in_buf[i];
+    if (in_buf[i] != in_buf[i-1])
+      i++;
+    else {
+      byte b=in_buf[i];
+      byte cnt=0;
+      while(cnt<255&&i<n-1&& b==in_buf[i+1]) {i++;cnt++;}
+      *out++=b+cnt;
+      i++;
+    }
+  }
+  n=out-out_buf;
+  printf("after rle n=%d\n",n);
+  memcpy(in_buf,out_buf,n);
+  return n;
+}
+
 void e8(signed long n) {
   long i;
   long *op;
@@ -693,12 +720,15 @@ int main(int argc,char *argv[]) {
     printf("usage: lzoma input output\n");
     exit(0);
   }
-
-  ifd=fopen(argv[1],"rb");
-  ofd=fopen(argv[2],"wb");
+  int arg=1;
+  char *inf=argv[arg++];
+  char *ouf=argv[arg++];
+  ifd=fopen(inf,"rb");
+  ofd=fopen(ouf,"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
-    printf("got %d bytes, packing %s into %s...\n",n,argv[1],argv[2]);
+    printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
     e8(n);
+    //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
     if (res==n) {
@@ -720,7 +750,7 @@ int main(int argc,char *argv[]) {
 //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
     }
   }
-  printf("closing files\n",n);
+  printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);
   close(ifd);
   close(ofd);
   return 0;
