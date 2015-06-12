@@ -29,7 +29,7 @@
 #define breaklen 4
 // level 5 / match_level 10000 compresses better but many times slower
 #define level 3
-#define match_level 245
+#define match_level 1000
 //#define level 5
 //#define level 1
 //#define match_level 10000000
@@ -597,7 +597,7 @@ if (!notskip) goto done;
 
       if (len<left) {
           CHECK_OLZ
-      }      
+      }
     }    
 
 done:
@@ -689,10 +689,15 @@ int main(int argc,char *argv[]) {
   int n,i,res,bres,blz;
   byte b;
 
+  if (argc<3) {
+    printf("usage: lzoma input output\n");
+    exit(0);
+  }
+
   ifd=fopen(argv[1],"rb");
   ofd=fopen(argv[2],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
-    printf("got %d bytes, packing...\n",n);
+    printf("got %d bytes, packing %s into %s...\n",n,argv[1],argv[2]);
     e8(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
@@ -703,14 +708,14 @@ int main(int argc,char *argv[]) {
     } else {
       fwrite(&bres,4,1,ofd);
       fwrite(&n,4,1,ofd);
-      if (breaklz==128) b=6;
+/*      if (breaklz==128) b=6;
       if (breaklz==256) b=7;
       if (breaklz==512) b=8;
       if (breaklz==1024) b=9;
       if (breaklz==2048) b=10;
       if (breaklz==4096) b=11;
       if (breaklz==8192) b=12;
-      fwrite(&b,1,1,ofd);
+      fwrite(&b,1,1,ofd);*/
       fwrite(out_best,1,bres,ofd);
 //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
     }

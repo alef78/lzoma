@@ -10,7 +10,7 @@
 #define byte unsigned char
 #define MAX_SIZE 16384*1024
 #define longlen 0x0D00
-int breaklz;
+int breaklz=1024;
 #define breaklen 2
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
@@ -181,10 +181,11 @@ int main(int argc,char * argv[]) {
   ofd=open(argv[2],O_WRONLY|O_CREAT|O_BINARY,511);
   while(read(ifd,&n,4)==4) {
     read(ifd,&n_unp,4);
-    read(ifd,&shift,1);
-    breaklz=1<<shift;
+    //read(ifd,&shift,1);
+    //breaklz=1<<shift;
+    breaklz = 1<<9;
     read(ifd,in_buf,n);
-    for(int t=0;t<10;t++)
+    //for(int t=0;t<10;t++)
     unpack(in_buf, out_buf, n_unp);
     e8back(out_buf,n_unp);
     write(ofd,out_buf,n_unp);
