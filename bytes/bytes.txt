@@ -1,0 +1,68 @@
+read 1 byte
+if byte<16
+  litlen=0
+  if byte==15
+    litlen=nextbyte+18 [18..255+18]
+  else
+    litlen=4+byte (0..14) : [3..17]
+  copy litlen bytes to output. worst overhead is for untypical 6 byte runs
+if byte<64
+  byte -=16 [0..47]
+  litlen=1+byte&3; [1,2,3,4] note we may choose to have litlen 1..4 and len for
+  the rest
+  olen=2+byte>>2; [2..13] if olen=13 olen+=nextbyte
+  copy litlen bytes from input
+  copy olen bytes from last match
+else
+  byte-=64
+  litlen=byte&3 [0..3]
+  byte>>2
+  byte <<8 + nextbyte now we have almost 14 bits
+  len top 3 bit 6 values 0..5
+  lz 11 bit 2048 values
+  if len>=... nextbyte
+  if lz>=... nextbyte
+
+  lets be
+  len=2+0..3 lz=0..2047 short match
+  len=4 read next byte so we have 19 bits and should encode at least 3 bytes
+    len=4bit=3+0..15 lz=15bit 0..32767. if lz<2048 len+=3 as 0..3 is short len
+    if len==3+15 read next bytes
+  len=5 read 2 next bytes 4 byte match so len should be 4 or more
+    we have 11+16=27 bits
+    len=4 bit 4+0..15 if len==3+15 read next bytes
+    lz=23bits 0..8mb
+      if lz<=32768
+        len+=2;read next 2 bytes.
+	  lz=0..32767<<16+.. 8mb+0..2gb
+
+
+comparison with bit encoder
+>=8 and up letters better
+6.7letter worse
+1..6 letters olen up to 8 8 bit
+  original: 1..6 bits.1bit lz.1bit olen.2bit len. min 5 bit if 1let+2-3char olen
+  after byte. max 6+1+1+5=13bit. typical ?
+0..5 letters lz len 2..8 dist 0..511 16 bit
+  original:
+    0..5 letters, 1 bit lz,1bit if after letter,min 2 bit len, min 9 bit dist
+      min 12 bit short lz after lz
+      min max 5+1+1+5+9=21 bit.
+worst cases:
+  6 letters shortlz we need 9 bytes. original was 6 bytes+6bits+12bits=8 1/4
+  7 letters olen we need 2bytes+7bytes. original was 7bytes+7bits+5bits=8 1/2
+
+best cases:
+  0..255 random
+  we use 258 bytes
+  original used 256+32=280 bytes
+
+how to encode:
+  calc letters till next lz
+  if letters >5 encode run
+  encode lz
+
+
+
+
+
