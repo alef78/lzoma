@@ -52,8 +52,7 @@ getcode_doneit: \
   ofs+=res;\
 }
 
-#define getlen(bits, src, left) {\
-  long int total = left; \
+#define getlen(bits, src) {\
   long int res=0;\
   int x=1;\
   \
@@ -62,27 +61,19 @@ getcode_doneit: \
     goto getlen_0bit;\
   }\
   len+=2;\
-  if (total<2) goto getlen_0bit;\
-  if (total==2) goto getlen_lastone;\
   while (1) {  \
     x+=x;\
     loadbit;\
     res+=res+getbit;\
-    total-=x;\
-    if (x-total>=0) break; \
     loadbit;\
-    if (getbit==0) goto getlen_doneit;\
+    if (getbit==0) break;\
     len+=x;\
   }\
-  if (res<x-total) goto getlen_doneit;\
-getlen_lastone:\
-  loadbit; if (getbit) res+=total;\
-getlen_doneit: \
   len+=res;\
 getlen_0bit: ;\
 }
 
-static void unpack_c(byte *src, byte *dst, int left) {
+static int unpack_c(byte *src, byte *dst, int left) {
   int ofs=-1;
   int len;
   int bits=0x80;
@@ -95,7 +86,7 @@ copyletter:
   left--;
 
 get_bit:
-  if (left<0) return;
+  if (left<0) return 0;
   loadbit;
   if (getbit==0) goto copyletter;
 
@@ -113,7 +104,7 @@ get_bit:
   if (ofs>=longlen) len++;
   ofs=-ofs;
 uselastofs:
-  getlen(bits,src,left);
+  getlen(bits,src);
 //  printf("lz: %d:%d,left=%d\n",ofs,len,left);
   left-=len;
 //    *dst=dst[ofs];

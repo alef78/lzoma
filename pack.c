@@ -207,6 +207,33 @@ doneit:
   }
 }
 
+static inline void putenc_l(int num, int break_at) {
+  char bits[100];
+  int res=0;
+  int x=1;
+  int obyte=0;
+
+  while (1) {
+    x+=x;
+    if (x>=break_at) {
+      if (num<(x>>1)) {bits[res++]=0; break;}
+      bits[res++]=1;
+      num-=x>>1;        
+    }
+    bits[res++]=2;
+  }
+
+  for(x=res-1;x>=0;x--) {
+    if (bits[x]==2) {
+      bits[x]=num&1;
+      num>>=1;
+    }
+  }
+  for(x=0;x<res;x++) {
+    putbit(bits[x]);
+  }
+}
+
 int old_ofs=0;
 int was_letter=1;
 
@@ -225,6 +252,7 @@ static inline void put_lz(int offset,int length,int used,int len_left) {
   putbit(1);
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
+      length-=2;
 
 //printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
   if (was_letter) {
@@ -232,25 +260,23 @@ static inline void put_lz(int offset,int length,int used,int len_left) {
     if (old_ofs==offset) {
     stolz++;
       putbit(0);
-      length-=2;
       if (length==0) { putbit(0);putbit(0);}
       else
       if (length==1) { putbit(0);putbit(1);}
       else {putbit(1);
-      putenc(length-2,len_left-1,breaklen);}
+      putenc_l(length-2,breaklen);}
       return;
     }
     putbit(1);
   }
   stlz++;
   if (offset+1>=longlen) { length--; }
-      length-=2;
       putenc(offset,used,breaklz);
       if (length==0) { putbit(0);putbit(0);}
       else
       if (length==1) { putbit(0);putbit(1);}
       else {putbit(1);
-  putenc(length-2,len_left-1,breaklen);}
+  putenc_l(length-2,breaklen);}
  
   old_ofs=offset;
 }
