@@ -147,7 +147,7 @@ uselastofs:
   goto get_bit;
 }
 
-extern void unpack(byte *src, byte *dst, int left);
+extern unsigned int unpack(byte *src, byte *dst, int left);
 void e8back(byte *buf,long n) {
   long i;
   signed long *op;
@@ -185,8 +185,8 @@ int main(int argc,char * argv[]) {
     //breaklz=1<<shift;
     breaklz = 1<<9;
     read(ifd,in_buf,n);
-    //for(int t=0;t<10;t++)
-    unpack(in_buf, out_buf, n_unp);
+    for(int t=0;t<10;t++)
+    printf("tsc=%d\n",unpack(in_buf, out_buf, n_unp));
     e8back(out_buf,n_unp);
     write(ofd,out_buf,n_unp);
   }

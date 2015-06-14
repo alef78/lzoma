@@ -1,4 +1,7 @@
 	.file	"unpack.S"
+.data
+rdtsc1:	 .word 0
+rdtsc2:  .word 0
 	.section	.text.unlikely,"ax",@progbits
 	.text
 	.align 16
@@ -9,6 +12,9 @@ unpack:
 	pushl	%edi
 	pushl	%esi
 	pushl	%ebx
+	rdtsc
+	movl    %eax,rdtsc1
+	#movl    %edx,rdtsc2
 	leal	-12(%esp), %esp
 	movl	40(%esp), %eax
 	movl	32(%esp), %edx
@@ -19,20 +25,23 @@ unpack:
 	decl    %eax
 	movl	%eax, 8(%esp)
 	movb    $128,%al
+	movb    (%edx),%ah
 .copyletter:
-	movb	(%edx), %cl   # cl = *src
+	#movb	(%edx), %cl   # cl = *src
 	inc     %edx          # src++
-	movb	%cl, (%edi)   # *dst = cl
+	movb	%ah, (%edi)   # *dst = cl
 	inc     %edi          # dst++
+	movb    (%edx),%ah
 	orl     $-1, %ebx     # ebx = len = -1
 	decl	(%esp)    # left--
 	js	.unpack_ret
 .checkleft:
 	addb    %al,%al
 	jnz	.nonextbit
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .nonextbit:
 .checkifletterorlz:
 	jnc	.copyletter
@@ -42,9 +51,10 @@ unpack:
 	jnz	.load_ofs
 	addb    %al,%al
 	jnz	.L9
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L9:
 	# ebx==0 at this point
 	jnc	.load_len
@@ -56,9 +66,10 @@ unpack:
 	movl	%ecx, 8(%esp)
 	movl	$1, %ebx
 	jle	.loop_ofs
-	movb	(%edx), %cl
+	movb	%ah, %cl
 	mov	$256, %ebx
 	inc     %edx
+	movb    (%edx),%ah
 .loop_ofs:
 	subl	%ebx, %edi
 	movl	%ebx, %ebp
@@ -68,9 +79,10 @@ unpack:
 	jl	.L14
 	addb    %al,%al
 	jnz	.L15
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L15:
 	jnc	.ofs_final_calc
 	addl	%ebx, 8(%esp)
@@ -81,9 +93,10 @@ unpack:
 	addl	%ebx, %ebx
 	addb    %al,%al
 	jnz	.L18
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L18:
 	adcl    %ecx,%ecx
 	jmp	.loop_ofs
@@ -91,14 +104,17 @@ unpack:
 	cmpl	%ebp, %ecx
 	movl	%edx, %ebx
 	jl	.ofs_final_calc
-	addl	%ecx, %edi
+	#addl	%ecx, %edi
 	addb    %al,%al
 	jnz	.L21
-	mov	(%ebx), %al
+	mov	%ah, %al
 	incl	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L21:
-	cmovc	%edi, %ecx
+	#cmovc	%edi, %ecx
+	jnc     .ofs_final_calc
+	addl    %edi,%ecx
 .ofs_final_calc:
 	movl	8(%esp), %esi
 	xorl	%ebx, %ebx
@@ -110,16 +126,18 @@ unpack:
 .load_len:
 	addb    %al,%al
 	jnz	.len2b
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .len2b:
 	jc	.lenlonger
 	addb    %al,%al
 	jnz	.len2b2
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .len2b2:
 	adcl    $2,%ebx
 	jmp	.copy_match
@@ -138,9 +156,10 @@ unpack:
 	subl	%edi, %esi
 	addb    %al,%al
 	jnz	.L26
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L26:
 	adcl    %ecx,%ecx
 
@@ -149,9 +168,10 @@ unpack:
 	jns	.L28
 	addb    %al,%al
 	jnz	.L29
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L29:
 	jnc	.L31
 	addl	%edi, %ebx
@@ -160,14 +180,17 @@ unpack:
 	cmpl	%ebp, %ecx
 	jl	.L31
 .L38:
-	addl	%ecx, %esi
+	#addl	%ecx, %esi
 	addb    %al,%al
 	jnz	.L33
-	mov	(%edx), %al
+	mov	%ah, %al
 	inc	%edx
 	adcb    %al,%al
+	movb    (%edx),%ah
 .L33:
-	cmovc	%esi, %ecx
+	#cmovc	%esi, %ecx
+	jnc     .L31
+	addl    %esi,%ecx
 .L31:
 	addl	%ecx, %ebx
 .copy_match:
@@ -180,6 +203,10 @@ unpack:
 	movl	%edi, 4(%esp)
 	jns	.checkleft
 .unpack_ret:
+        rdtsc
+	subl rdtsc1,%eax
+	#sbbl rdtsc2,%edx
+	
 	leal	12(%esp), %esp
 	popl	%ebx
 	popl	%esi
