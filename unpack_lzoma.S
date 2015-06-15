@@ -22,7 +22,7 @@ unpack:
 	movl	%eax, (%esp)
 	xorl	%eax, %eax
 	decl    %eax
-	movl	%eax, 8(%esp)
+	movl	%eax, %ebp
 	movb    $128,%al
 .copyletter:
 	movb	(%edx), %cl   # cl = *src
@@ -58,7 +58,7 @@ unpack:
 	subl	$out_buf, %edi
 	xorl	%ecx, %ecx
 	cmpl	$256, %edi
-	movl	%ecx, 8(%esp)
+	movl	%ecx, %ebp
 	movl	$1, %ebx
 	jle	.loop_ofs
 	mov	(%edx), %cl
@@ -66,8 +66,6 @@ unpack:
 	inc     %edx
 .loop_ofs:
 	subl	%ebx, %edi
-	#movl	%ebx, %ebp
-	#subl	%edi, %ebp
 	cmpl    %edi,%ebx
 	jns	.ofs_last_bit
 	cmpl	%esi, %ebx
@@ -79,7 +77,7 @@ unpack:
 	adcb    %al,%al
 .L15:
 	jnc	.ofs_final_calc
-	addl	%ebx, 8(%esp)
+	addl	%ebx, %ebp
 	subl	%ebx, %edi
 	sall	$3, %esi
 .L14:
@@ -106,7 +104,7 @@ unpack:
 	jnc     .ofs_final_calc
 	addl    %edi,%ecx
 .ofs_final_calc:
-	movl	8(%esp), %esi
+	movl	%ebp, %esi
 	leal	1(%esi,%ecx), %edi
 	xorl	%ebx, %ebx
 	cmpl	$3328, %edi
@@ -114,7 +112,7 @@ unpack:
 	cmpl	$0x40000, %edi
 	sbb     $-1,%ebx
 	negl	%edi
-	movl	%edi, 8(%esp)
+	movl	%edi, %ebp
 .load_len:
 	addb    %al,%al
 	jnz	.len2b
@@ -157,7 +155,7 @@ unpack:
 	addl	%ecx, %ebx
 .copy_match:
 	movl	4(%esp), %edi
-	movl	8(%esp), %esi
+	movl	%ebp, %esi
 	movl	%ebx, %ecx
 	addl	%edi, %esi
 	rep movsb
