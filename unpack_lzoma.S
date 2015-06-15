@@ -9,88 +9,88 @@ unpack:
 	pushl	%edi
 	pushl	%esi
 	pushl	%ebx
-	movl	28(%esp), %esi # uncompressed bytes num
-	movl	20(%esp), %edx # input buffer
-	decl	%esi
+	movl	28(%esp), %edx # uncompressed bytes num
+	movl	20(%esp), %esi # input buffer
+	decl	%edx
 	movl	24(%esp), %edi # edi = output buffer
         pushl   %edi # save output buffer start in stack
 	xorl	%ebp, %ebp
-	movb    $128,%al
+	movl    $0x80000000,%eax
 	incl    %ebp # ebp = offset = -1
 .copyletter:
-	movb	(%edx), %cl   # cl = *src
-	inc     %edx          # src++
-	movb	%cl, (%edi)   # *dst = cl
+	movsb
+	#movb	(%esi), %cl   # cl = *src
+	#inc     %esi          # src++
+	#movb	%cl, (%edi)   # *dst = cl
+	#inc     %edi          # dst++
 	orl     $-1, %ebx     # ebx = len = -1
-	inc     %edi          # dst++
-	decl	%esi    # left--
+	decl	%edx    # left--
 	js	.unpack_ret
 .checkleft: 
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.nonextbit
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .nonextbit:
 .checkifletterorlz:
 	jnc	.copyletter
 .unpack_lz:
 	incl	%ebx
-	push %esi # save left
+	push %edx # save left
 	jnz	.load_ofs
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.L9
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L9:
 	# ebx==0 at this point
 	jnc	.load_len
 .load_ofs:
 	push %edi # save dst, we need edi as temp register
 	xor     %ebp,%ebp
-	movzxb	(%edx), %ecx
+	movzxb	(%esi), %ecx
 	mov	$256, %ebx
 	subl	8(%esp), %edi # here (%esp) is pushed edi, 4(%esp) is left
 
         inc     %ebp
-	inc     %edx
+	inc     %esi
 	cmpl	%ebx, %edi
-	#movl	breaklz, %esi
-	#movl    $256,%esi
-	movl    %ebx,%esi
-	#movb    $2,%ah
+	#movl	breaklz, %edx
+	#movl    $256,%edx
+	movl    %ebx,%edx
 	jnle	.loop_ofs
-	#movb    $10,%ah
 	movl	%ebp, %ebx
 	xorl	%ecx, %ecx
-	dec     %edx
+	dec     %esi
 .loop_ofs:
 	subl	%ebx, %edi
 	cmpl    %edi,%ebx
 	jns	.ofs_last_bit
-	cmpl	%esi, %ebx
-	#dec     %ah
-	#jnz	.notbreakofs
+	cmpl	%edx, %ebx
 	jle	.notbreakofs
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.L15
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L15:
 	jnc	.ofs_final_calc
 	addl	%ebx, %ebp
-	sall	$3, %esi
-	#mov     $3,%ah
+	sall	$3, %edx
 	subl	%ebx, %edi
 .notbreakofs:
 	addl	%ebx, %edi
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.L18
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L18:
 	adcl    %ecx,%ecx
 	addl	%ebx, %ebx
@@ -99,11 +99,12 @@ unpack:
 	subl    %edi,%ebx
 	cmpl	%ebx, %ecx
 	jl	.ofs_final_calc
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.L21
-	mov	(%edx), %al
-	incl	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L21:
 	jnc     .ofs_final_calc
 	addl    %edi,%ecx
@@ -116,52 +117,58 @@ unpack:
 	sbb     $-2,%ebx
 	#negl	%ebp
 .load_len:
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.len2b
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .len2b:
 	jc	.lenlonger
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.len2b2
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .len2b2:
 	adcl    $2,%ebx
 	jmp	.copy_match
 
 .lenlonger:
 	addl	$3, %ebx
-	movl	$1, %esi
+	movl	$1, %edx
 	xorl	%ecx, %ecx
 .lenloop:
-	addl	%esi, %ebx
-	addl	%esi, %esi
-	addb    %al,%al
+	addl	%edx, %ebx
+	addl	%edx, %edx
+	addl    %eax,%eax
 	jnz	.L26
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L26:
 	adcl    %ecx,%ecx
 
-	addb    %al,%al
+	addl    %eax,%eax
 	jnz	.L29
-	mov	(%edx), %al
-	inc	%edx
-	adcb    %al,%al
+	#mov	(%esi), %eax
+	#lea	4(%esi),%esi
+	lodsl
+	adcl    %eax,%eax
 .L29:
 	jc	.lenloop
 	addl	%ecx, %ebx
 .copy_match:
+        pushl    %esi
 	movl	%edi, %esi
 	movl	%ebx, %ecx
 	subl	%ebp, %esi
 	rep movsb
 	popl    %esi
-	subl	%ebx, %esi # left-=len
+	popl    %edx
+	subl	%ebx, %edx # left-=len
 	jns	.checkleft
 .unpack_ret:
 	popl    %edi # just smallest way to dec esp

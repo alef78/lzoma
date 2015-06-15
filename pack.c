@@ -147,18 +147,18 @@ static inline int len_encode_l_dec(int num) {//num>=2
 
 
 int lastpos;
-int bit_cnt;
+unsigned int bit_cnt;
 int outpos;
 
 static inline void putbit(int bit) {
   bit_cnt>>=1;
   if (bit_cnt==0) {
     lastpos=outpos;
-    out_buf[lastpos]=0;
-    outpos++;
-    bit_cnt=128;
+    *(unsigned long*)(out_buf+lastpos)=0;
+    outpos+=4;
+    bit_cnt=0x80000000;//128;
   }
-  if (bit) out_buf[lastpos]|=bit_cnt;
+  if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;//out_buf[lastpos]|=bit_cnt;
 }
 
 static inline void putenc(int num,int total, int break_at) {
