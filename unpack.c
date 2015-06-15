@@ -5,13 +5,14 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <x86intrin.h>
 
 #define O_BINARY 0
 #define byte unsigned char
 #define MAX_SIZE 16384*1024
 #define longlen 0x0D00
 #define hugelen 0x40000
-int breaklz=1024;
+#define breaklz 512
 #define breaklen 2
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
@@ -74,7 +75,7 @@ getcode_doneit: \
 getlen_0bit: ;\
 }
 
-static int unpack_c(byte *src, byte *dst, int left) {
+static void unpack_c(byte *src, byte *dst, int left) {
   int ofs=-1;
   int len;
   int bits=0x80;
@@ -87,7 +88,7 @@ copyletter:
   left--;
 
 get_bit:
-  if (left<0) return 0;
+  if (left<0) return;
   loadbit;
   if (getbit==0) goto copyletter;
 
@@ -176,10 +177,14 @@ int main(int argc,char * argv[]) {
     read(ifd,&n_unp,4);
     //read(ifd,&shift,1);
     //breaklz=1<<shift;
-    breaklz = 1<<9;
+    //breaklz = 1<<9;
     read(ifd,in_buf,n);
-    for(int t=0;t<10;t++)
-    printf("tsc=%d\n",unpack(in_buf, out_buf, n_unp));
+    for(int t=0;t<10;t++) {
+      long unsigned tsc = (long unsigned)__rdtsc();
+      unpack(in_buf, out_buf, n_unp);
+      tsc=(long unsigned)__rdtsc()-tsc;
+      printf("tsc=%lu\n",tsc);
+    }
     e8back(out_buf,n_unp);
     write(ofd,out_buf,n_unp);
   }

@@ -14,7 +14,7 @@ Compression ratio is much higher that gzip / bzip2. And much much
 higher than LZO. Somewhat higher than LZHAM, that has similar goals. A bit worse than lzma/xz.
 Decompression speed is similar to UCL (a bit slower that LZO, faster than
 gzip, bzip2 etc).
-Decompressor code length is about 350-400 bytes.
+Decompressor code length is less than 300 bytes.
 Has special filter for x86 code.
 Decompression can be done in-place and does not require additional memory.
 
