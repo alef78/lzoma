@@ -10,6 +10,7 @@
 #define byte unsigned char
 #define MAX_SIZE 16384*1024
 #define longlen 0x0D00
+#define hugelen 0x40000
 int breaklz=1024;
 #define breaklen 2
 
@@ -27,7 +28,7 @@ byte out_buf[MAX_SIZE];
   long int res=0;\
   int x=1;\
 \
-  if (break_at >= 256 && total >= 256) {\
+  if (break_at >= 256 && total > 256) {\
      x=256;\
      res=*src++;\
   }\
@@ -102,6 +103,7 @@ get_bit:
   getcode(bits,src,dst-out_buf,breaklz);
   ofs++;
   if (ofs>=longlen) len++;
+  if (ofs>=hugelen) len++;
   ofs=-ofs;
 uselastofs:
   getlen(bits,src);
@@ -169,7 +171,7 @@ int main(int argc,char * argv[]) {
   char shift;
 
   ifd=open(argv[1],O_RDONLY|O_BINARY);
-  ofd=open(argv[2],O_WRONLY|O_CREAT|O_BINARY,511);
+  ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
   while(read(ifd,&n,4)==4) {
     read(ifd,&n_unp,4);
     //read(ifd,&shift,1);

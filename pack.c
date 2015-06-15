@@ -26,6 +26,9 @@
 //0x52398c
 // min lz is 1bit+10bits+breakbit+2bitlen=14 bit. 2 chars=18bit
 #define longlen 0x0d00
+//#define hugelen 0x080000 a bit too much
+#define hugelen 0x040000
+//#define hugelen 0x020000
 #define breaklz 1024
 //1024
 #define breaklen 4
@@ -97,7 +100,8 @@ doneit:
 static inline int len_encode_l(int num) {//num>=2
 if (num<4) return 2;// 00 01
 num-=2;
-  //return 1+((31-__builtin_clz(num))<<1);
+//#define SKEW 1
+//  return SKEW+((31-__builtin_clz(num))<<1);
   if (num<4) return 1+2;// 0 0=2 1=3
   if (num<8) return 1+4; // 10 00=4 01=5 10=6 11=7
   if (num<16) return 1+6; // 110 xxx 8-15
@@ -162,7 +166,7 @@ static inline void putenc(int num,int total, int break_at) {
   int res=0;
   int x=1;
   int obyte=0;
-if (total >= 256 && break_at >= 256)
+if (total > 256 && break_at >= 256)
 obyte=1;
 //  printf("debug: putenc num=%d, total=%d, break_at=%d,",num,total,break_at);
 
@@ -212,6 +216,10 @@ static inline void putenc_l(int num, int break_at) {
   int res=0;
   int x=1;
   int obyte=0;
+  
+  if (num==0) { putbit(0);putbit(0);return;}
+  if (num==1) { putbit(0);putbit(1);return;}
+  putbit(1);num-=2;
 
   while (1) {
     x+=x;
@@ -248,40 +256,41 @@ void initout(void) {
 int stlet=0;
 int stlz=0;
 int stolz=0;
-static inline void put_lz(int offset,int length,int used,int len_left) {
+static inline void put_lz(int offset,int length,int used) {
   putbit(1);
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
-      length-=2;
-
+  length-=2;
+if (used==256) printf("256 %d %d\n",offset,length);
+fprintf(stderr,was_letter?"\nw":"n");
 //printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
   if (was_letter) {
     was_letter=0;
     if (old_ofs==offset) {
+fprintf(stderr,"o%d\n",length);
     stolz++;
       putbit(0);
-      if (length==0) { putbit(0);putbit(0);}
-      else
-      if (length==1) { putbit(0);putbit(1);}
-      else {putbit(1);
-      putenc_l(length-2,breaklen);}
+      //putenc_l(0,breaklen);
+      //length^=1;
+      putenc_l(length,breaklen);
       return;
     }
+    //putenc_l(0,breaklen);
     putbit(1);
+    //length++;
   }
   stlz++;
   if (offset+1>=longlen) { length--; }
-      putenc(offset,used,breaklz);
-      if (length==0) { putbit(0);putbit(0);}
-      else
-      if (length==1) { putbit(0);putbit(1);}
-      else {putbit(1);
-  putenc_l(length-2,breaklen);}
+  if (offset+1>=hugelen) { length--; }
+fprintf(stderr,"l%d %d\n",length,offset);
+  putenc(offset,used,breaklz);
+  putenc_l(length,breaklen);
  
   old_ofs=offset;
 }
 
 static inline void put_letter(byte b) {
+fprintf(stderr,"i");
   putbit(0);
   out_buf[outpos++]=b;
   was_letter++;
@@ -293,6 +302,7 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
   int res=1; /* 1 bit = not a letter */
 
   if (offset>=longlen) { length--; }
+  if (offset>=hugelen) { length--; }
 
   offset--; /* 0.. */
 
@@ -304,8 +314,10 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
 
 static inline int len_olz_minus_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
-  int res=1;
-  if (offset>=longlen) { res+=len_encode_l(length)-len_encode_l(length-1); }
+  int res=1;//because olz
+  int ll=(offset>=longlen) ? 1:0;
+  if (offset>=hugelen) ll=2;
+   { res+=len_encode_l(length)-len_encode_l(length-ll); }
   offset--; /* 0.. */
   return res-len_encode(offset,used);
 }
@@ -427,7 +439,7 @@ static inline int min(int a,int b) {
           if (olen==0) {\
             olen=cmpstr(used+k,pos+k);\
             for (j=2;j<olen;j+=cacherle[used+k+j]) {\
-              int tmp2=tmp+2+len_encode_l(j);\
+              int tmp2=tmp+1+1+len_encode_l(j);\
               tmp2+=cache[used+k+j];\
               if (tmp2<res) {\
                 res=tmp2;\
@@ -506,14 +518,17 @@ int pack(int n) {
 
     res=9+cache[used+1];
     if (best_ofs[used+1]) {
+      //int ll=-best_ofs[used+1] < longlen ? 0:1;
+      //res+=len_encode_l(best_len[used+1]-ll+1)-len_encode_l(best_len[used+1]-ll);
       res++;
+      //res++;
       if (in_buf[used]==in_buf[used+1]) {
         if (in_buf[used]==in_buf[used-1]) {
           if (in_buf[used]==in_buf[used+best_ofs[used+1]]) {
-            if ((best_len[used+1]>2)||(-best_ofs[used+1]<longlen)) {
+            if ((best_len[used+1]>3)||(best_len[used+1]==3&&-best_ofs[used+1]<hugelen)|| (-best_ofs[used+1]<longlen)) {
               int tmp=cache[used+1]-len_lz(-best_ofs[used+1],best_len[used+1],used+1)
                   +len_lz(-best_ofs[used+1],best_len[used+1]+1,used);
-	      if (tmp<res) {
+	      if (tmp<=res) {
 	        res=tmp;
                 my_best_ofs=best_ofs[used+1];
                 my_best_len=best_len[used+1]+1;
@@ -536,6 +551,7 @@ if (notskip) {
       //max_match=2;//my_best_len+1;//2;
       //if (used-pos>=longlen) { max_match++;}
       int ll=(used-pos>=longlen)?1:0;
+      if (used-pos>=hugelen) ll=2;
       for(j=2+ll;j<=len;j+=cacherle[used+j]) {
       //for(j=len;j>=max_match;j-=len_encode_l_dec(j-ll)) {
         int tmp2=tmp+len_encode_l(j-ll);
@@ -608,14 +624,16 @@ if (!notskip) goto done;
 	bottom=sorted_next[bottom];
       }
       if (used-pos<longlen) continue; // we already checked it
+      if (len<=3 && used-pos>=hugelen) continue; // 
       if (len<=2) goto done;
       if (my_min_ofs>used-pos) {
       my_min_ofs=used-pos;//we are checking matches in decreasing order. we need to check next matches only if those are shorter
       int tmp=1+len_encode(used-pos-1,used);
-      for(j=3;j<=len;j+=cacherle[used+j]) {
-        int tmp2=tmp+len_encode_l(j-1);
+      int ll=(used-pos>=hugelen)?1:0;
+      for(j=3+ll;j<=len;j+=cacherle[used+j]) {
+        int tmp2=tmp+len_encode_l(j-1-ll);
         tmp2+=cache[used+j];
-        if (tmp2<res) {
+        if (tmp2<=res) {
           res=tmp2;
           my_best_ofs=pos-used;
           my_best_len=j;
@@ -672,7 +690,7 @@ done:
       int k,ofs,len;
 dolz:
 //      printf("do_lz %d:%d,left=%d\n",best_ofs[i],best_len[i],n-i);
-      put_lz(best_ofs[i],best_len[i],i,n-i);
+      put_lz(best_ofs[i],best_len[i],i);
       ofs=best_ofs[i];len=olz_len[i];
       k=use_olz[i];
       i+=best_len[i];
@@ -680,7 +698,7 @@ dolz:
         for(;k>0;k--) put_letter(in_buf[i++]);
         if ((use_olz[i])&&(len==best_len[i])&&(ofs==best_ofs[i])) goto dolz;
 //        printf("put_lz %d:%d,left=%d\n",ofs,len,n-i);
-        put_lz(ofs,len,i,n-i);
+        put_lz(ofs,len,i);
         i+=len;
       }
     }

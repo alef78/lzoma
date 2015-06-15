@@ -57,7 +57,7 @@ unpack:
 	movl	breaklz, %esi
 	subl	$out_buf, %edi
 	xorl	%ecx, %ecx
-	cmpl	$255, %edi
+	cmpl	$256, %edi
 	movl	%ecx, 8(%esp)
 	movl	$1, %ebx
 	jle	.loop_ofs
@@ -109,7 +109,9 @@ unpack:
 	xorl	%ebx, %ebx
 	leal	1(%esi,%ecx), %edi
 	cmpl	$3328, %edi
-	setge	%bl
+	sbb     $-1,%bl
+	cmpl	$0x40000, %edi
+	sbb     $-1,%bl
 	negl	%edi
 	movl	%edi, 8(%esp)
 .load_len:
