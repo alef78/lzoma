@@ -14,16 +14,15 @@ unpack:
 	pushl	%ebx
 	rdtsc
 	movl    %eax,rdtsc1
-	leal	-12(%esp), %esp
-	movl	40(%esp), %eax
-	movl	32(%esp), %edx
+	movl	28(%esp), %eax # uncompressed bytes
+	movl	20(%esp), %edx # input buffer
 	decl	%eax
-	movl	36(%esp), %edi
-	movl	%eax, (%esp)
-	xorl	%eax, %eax
-	decl    %eax
-	movl	%eax, %ebp
+	movl	24(%esp), %edi # edi = output buffer
+        pushl   %edi # save output buffer start in stack
+        pushl   %eax # (%esp) = bytes left -1
+	xor	%ebp, %ebp
 	movb    $128,%al
+	decl    %ebp # ebp = offset = -1
 .copyletter:
 	movb	(%edx), %cl   # cl = *src
 	inc     %edx          # src++
@@ -41,8 +40,8 @@ unpack:
 .nonextbit:
 .checkifletterorlz:
 	jnc	.copyletter
-	movl	%edi, 4(%esp) # dst = edi
-.unpack_lz:
+	push %edi # save dst, we need edi as temp register
+#.unpack_lz:
 	incl	%ebx
 	jnz	.load_ofs
 	addb    %al,%al
@@ -55,11 +54,11 @@ unpack:
 	jnc	.load_len
 .load_ofs:
 	movl	breaklz, %esi
-	subl	$out_buf, %edi
+	subl	8(%esp), %edi # here (%esp) is pushed edi, 4(%esp) is left
 	xorl	%ecx, %ecx
-	cmpl	$256, %edi
-	movl	%ecx, %ebp
 	movl	$1, %ebx
+	cmpl	$256, %edi
+	movl	%ebx, %ebp
 	jle	.loop_ofs
 	mov	(%edx), %cl
 	mov	$256, %ebx
@@ -104,15 +103,13 @@ unpack:
 	jnc     .ofs_final_calc
 	addl    %edi,%ecx
 .ofs_final_calc:
-	movl	%ebp, %esi
-	leal	1(%esi,%ecx), %edi
+	addl	%ecx, %ebp
 	xorl	%ebx, %ebx
-	cmpl	$3328, %edi
+	cmpl	$0xD00, %ebp
 	sbb     $-1,%ebx
-	cmpl	$0x40000, %edi
+	cmpl	$0x40000, %ebp
 	sbb     $-1,%ebx
-	negl	%edi
-	movl	%edi, %ebp
+	negl	%ebp
 .load_len:
 	addb    %al,%al
 	jnz	.len2b
@@ -154,19 +151,20 @@ unpack:
 	jc	.lenloop
 	addl	%ecx, %ebx
 .copy_match:
-	movl	4(%esp), %edi
+	popl    %edi # restore dst
 	movl	%ebp, %esi
 	movl	%ebx, %ecx
 	addl	%edi, %esi
 	rep movsb
 	subl	%ebx, (%esp) # left-=len
-	movl	%edi, 4(%esp)
 	jns	.checkleft
 .unpack_ret:
         rdtsc
 	subl rdtsc1,%eax
 	
-	leal	12(%esp), %esp
+	popl    %edi # just smallest way to dec esp
+	popl    %ebp
+
 	popl	%ebx
 	popl	%esi
 	popl	%edi
