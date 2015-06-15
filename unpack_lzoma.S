@@ -66,8 +66,9 @@ unpack:
 	inc     %edx
 .loop_ofs:
 	subl	%ebx, %edi
-	movl	%ebx, %ebp
-	subl	%edi, %ebp
+	#movl	%ebx, %ebp
+	#subl	%edi, %ebp
+	cmpl    %edi,%ebx
 	jns	.ofs_last_bit
 	cmpl	%esi, %ebx
 	jl	.L14
@@ -83,7 +84,6 @@ unpack:
 	sall	$3, %esi
 .L14:
 	addl	%ebx, %edi
-	addl	%ebx, %ebx
 	addb    %al,%al
 	jnz	.L18
 	mov	(%edx), %al
@@ -91,10 +91,11 @@ unpack:
 	adcb    %al,%al
 .L18:
 	adcl    %ecx,%ecx
+	addl	%ebx, %ebx
 	jmp	.loop_ofs
 .ofs_last_bit:
-	cmpl	%ebp, %ecx
-	movl	%edx, %ebx
+	subl    %edi,%ebx
+	cmpl	%ebx, %ecx
 	jl	.ofs_final_calc
 	addb    %al,%al
 	jnz	.L21
@@ -106,12 +107,12 @@ unpack:
 	addl    %edi,%ecx
 .ofs_final_calc:
 	movl	8(%esp), %esi
-	xorl	%ebx, %ebx
 	leal	1(%esi,%ecx), %edi
+	xorl	%ebx, %ebx
 	cmpl	$3328, %edi
-	sbb     $-1,%bl
+	sbb     $-1,%ebx
 	cmpl	$0x40000, %edi
-	sbb     $-1,%bl
+	sbb     $-1,%ebx
 	negl	%edi
 	movl	%edi, 8(%esp)
 .load_len:
