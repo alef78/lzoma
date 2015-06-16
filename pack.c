@@ -25,11 +25,17 @@
 #define MAX_SIZE 16384*1024
 //0x52398c
 // min lz is 1bit+10bits+breakbit+2bitlen=14 bit. 2 chars=18bit
-#define longlen 0x0d00
+//#define longlen 0x0d00
+#define longlen 5287
 //#define hugelen 0x080000 a bit too much
 #define hugelen 0x040000
 //#define hugelen 0x020000
-#define breaklz 1024
+#define breaklz 512
+#define lzmagic 0x1244FF00
+#define lzshift 1
+//#define lzmagic 0x11084F00
+//#define lzshift 0
+#define LZLOW 26
 //1024
 #define breaklen 4
 // level 5 / match_level 10000 compresses better but many times slower
@@ -66,29 +72,50 @@ int sorted_len[MAX_SIZE];
 int sorted_prev[MAX_SIZE];
 int sorted_next[MAX_SIZE];
 
+int lzlow(int total) {
+  int top=LZLOW;
+/*  if (total <= 5158187) top = 30;
+  if (total <= 3133223) top = 32;
+  if (total <= 346475) top = 40;
+  if (total <= 28596) top = 50;
+  if (total <= 5055) top = 70;
+  if (total <= 3417) top = 80;
+  if (total <= 1750) top = 100;
+  if (total <= 950) top = 124;
+  if (total <= 929) top = 125;
+  if (total <= 901) top = 126;
+  if (total <= 880) top = 127;
+  if (total <= 848) top = 128;
+  if (total <= 259) top = 253;
+  if (total <= 258) top = 254;
+  if (total <= 257) top = 255;
+  if (total <= 256) top = 256;*/
+  return top;
+}
+
 static inline int len_encode(int num,int total) {
   register int res=0;
   register int x=1;
-  register int ox;
   int break_at=breaklz;
 
-  if (total>=1024) {
+/*  if (total>=1024) {
     if (num<512) return 10;
     x=512;
     res=9;
-  }
-
+  }*/
+  int top = lzlow(total);
   while (1) {
-    ox=x;
     x+=x;
-    if (x>=total) break; /* only 1 bit to be outputted left */
     if (x>=break_at) {
-      res++; /* we write 'break' bit */
-      num-=ox;
-      if (num<0) goto doneit;
-      total-=ox;
-      break_at<<=3;//2;
+      if (num<top) { goto doneit;}
+      num+=top;
+      total+=top;
+      if (x & lzmagic)
+        top+=top+(top>>lzshift);
+      else
+        top+=top;
     }
+    if (x>=total) break; /* only 1 bit to be outputted left */
     res++;
   }
   if (num>=x-total) { res++;}
@@ -155,39 +182,50 @@ static inline void putbit(int bit) {
   if (bit_cnt==0) {
     lastpos=outpos;
     *(unsigned long*)(out_buf+lastpos)=0;
-    outpos+=4;
-    bit_cnt=0x80000000;//128;
+//    outpos+=4;
+//    bit_cnt=0x80000000;//128;
+    outpos+=1;
+    bit_cnt=0x80;
   }
   if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;//out_buf[lastpos]|=bit_cnt;
 }
 
-static inline void putenc(int num,int total, int break_at) {
+static inline void putenc(int num,int total, int break_at, int debug) {
   char bits[100];
   int res=0;
   int x=1;
   int obyte=0;
-if (total > 256 && break_at >= 256)
+  if (total > 256 && break_at >= 256)
 obyte=1;
-//  printf("debug: putenc num=%d, total=%d, break_at=%d,",num,total,break_at);
+//  fprintf(stderr,"debug: putenc num=%d, total=%d, break_at=%d\n",num,total,break_at);
 
+  int top=lzlow(total);
+  //int up=1;// 0 bits code 1 symbol
   while (1) {
     x+=x;
-    if (x>=total) break; /* only 1 bit to be outputted left */
+    //up+=up;
     if (x>=break_at) {
-      if (num<(x>>1)) {bits[res++]=0;  goto doneit;}
-      bits[res++]=1;
-      num-=x>>1;        
-      total-=x>>1;
-      if (break_at!=breaklen) break_at<<=3;
+      if (num<top) {  goto doneit;}
+      num+=top;
+      total+=top;
+      if (x & lzmagic)
+      top+=top+(top>>lzshift);
+      else
+        top+=top;
     }
+    if (x>=total) break; /* only 1 bit to be outputted left */
     bits[res++]=2;
   }
+
   if (num>=x-total) {
-    if (num>=(x>>1)) {
+    num+=(x>>1);
+    num-=total-(x>>1);
+    bits[res++]=2;
+/*    if (num>=(x>>1)) {
       bits[res++]=1; num-=total-(x>>1);
     } else {
       bits[res++]=0;
-    }
+    }*/
   }
 
 doneit: 
@@ -198,15 +236,20 @@ doneit:
     }
   }
   if (obyte) {
+  //printf("res=%d\n", res);
   byte b=0;
   for(x=0;x<8;x++) 
     if (bits[x]) b|=128>>x;
   out_buf[outpos++]=b;
-  for(;x<res;x++) 
+  for(;x<res;x++) {
+    if (debug) printf("%d",bits[x]);
     putbit(bits[x]);
+  }
   }
   else 
   for(x=0;x<res;x++) {
+    if (debug)
+    printf("%d",bits[x]);
     putbit(bits[x]);
   }
 }
@@ -261,13 +304,12 @@ static inline void put_lz(int offset,int length,int used) {
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
   length-=2;
-if (used==256) printf("256 %d %d\n",offset,length);
-fprintf(stderr,was_letter?"\nw":"n");
+//fprintf(stderr,was_letter?"\nw":"n");
 //printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
   if (was_letter) {
     was_letter=0;
     if (old_ofs==offset) {
-fprintf(stderr,"o%d\n",length);
+//fprintf(stderr,"o%d\n",length);
     stolz++;
       putbit(0);
       //putenc_l(0,breaklen);
@@ -282,15 +324,15 @@ fprintf(stderr,"o%d\n",length);
   stlz++;
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
-fprintf(stderr,"l%d %d\n",length,offset);
-  putenc(offset,used,breaklz);
+//fprintf(stderr,"l%d %d\n",length,offset);
+  putenc(offset,used,breaklz, 0);
   putenc_l(length,breaklen);
  
   old_ofs=offset;
 }
 
 static inline void put_letter(byte b) {
-fprintf(stderr,"i");
+//fprintf(stderr,"i");
   putbit(0);
   out_buf[outpos++]=b;
   was_letter++;
@@ -762,6 +804,13 @@ int main(int argc,char *argv[]) {
 
   if (argc<3) {
     printf("usage: lzoma input output\n");
+    int i;
+    int total=16*1024*1024;
+    for(i=0;i<total;i++) {
+      printf("%04d:",i);
+      putenc(i, total,breaklz, 1);
+      printf("\n");
+    }
     exit(0);
   }
   int arg=1;

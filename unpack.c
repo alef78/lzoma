@@ -10,10 +10,12 @@
 #define O_BINARY 0
 #define byte unsigned char
 #define MAX_SIZE 16384*1024
-#define longlen 0x0D00
+#define longlen 5287
 #define hugelen 0x40000
 #define breaklz 512
 #define breaklen 2
+#define lzmagic 0x1244FF00
+#define LZLOW 26
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
@@ -28,6 +30,7 @@ byte out_buf[MAX_SIZE];
   ofs=0;\
   long int res=0;\
   int x=1;\
+  int top=LZLOW;\
 \
   if (break_at >= 256 && total > 256) {\
      x=256;\
@@ -35,23 +38,34 @@ byte out_buf[MAX_SIZE];
   }\
 \
   while (1) {\
-    total-=x;\
-    if (x-total>=0) break;\
-    if (x>=break_at) {\
-      loadbit;\
-      if (getbit==0) goto getcode_doneit;\
-      ofs+=x;\
-      total-=x;\
-      break_at<<=3;\
-    }\
-    total+=x;\
     x+=x;\
+    if (x>=512) {\
+      if (res<top) {  goto getcode_doneit;}\
+      ofs-=top;\
+      total+=top;\
+      if (x & lzmagic)\
+      top+=top+(top>>1);\
+      else\
+        top+=top;\
+      /*if (ofs <= top) goto getcode_doneit;*/\
+      /*ofs+=x;*/\
+      /*total-=x;*/\
+      /*break_at<<=3;*/\
+    }\
+    if (x>=total) break;\
     loadbit;\
     res+=res+getbit;\
   }\
-  if (res>=x-total) { loadbit; if (getbit) res+=total;}\
+  x>>=1;\
+  total-=x;\
+  if (res>=x-total) { \
+    loadbit; res+=res+getbit;\
+    res-=(x>>1);\
+    res+=total-(x>>1);\
+  }\
 getcode_doneit: \
   ofs+=res;\
+  /*fprintf(stderr,"ofs=%d total=%d\n",ofs,ptotal);*/\
 }
 
 #define getlen(bits, src) {\
@@ -82,6 +96,7 @@ static void unpack_c(byte *src, byte *dst, int left) {
   left--;
 
 copyletter:
+//fprintf(stderr,"i");
   *dst++=*src++;
   //was_letter=1;
   len=-1;
@@ -94,12 +109,14 @@ get_bit:
 
   /* unpack lz */
   if (len<0) {
+//fprintf(stderr,"\nw");
     len=2;
     loadbit;
     if (!getbit) {
       goto uselastofs;
     }
-  }
+  } else
+//fprintf(stderr,"\nn");
   len=2;
   getcode(bits,src,dst-out_buf,breaklz);
   ofs++;
@@ -181,7 +198,7 @@ int main(int argc,char * argv[]) {
     read(ifd,in_buf,n);
     for(int t=0;t<10;t++) {
       long unsigned tsc = (long unsigned)__rdtsc();
-      unpack(in_buf, out_buf, n_unp);
+      unpack_c(in_buf, out_buf, n_unp);
       tsc=(long unsigned)__rdtsc()-tsc;
       printf("tsc=%lu\n",tsc);
     }
