@@ -182,10 +182,10 @@ static inline void putbit(int bit) {
   if (bit_cnt==0) {
     lastpos=outpos;
     *(unsigned long*)(out_buf+lastpos)=0;
-//    outpos+=4;
-//    bit_cnt=0x80000000;//128;
-    outpos+=1;
-    bit_cnt=0x80;
+    outpos+=4;
+    bit_cnt=0x80000000;
+//    outpos+=1;
+//    bit_cnt=0x80;
   }
   if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;//out_buf[lastpos]|=bit_cnt;
 }

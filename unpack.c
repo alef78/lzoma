@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <x86intrin.h>
 
 #define O_BINARY 0
@@ -20,8 +21,8 @@
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
 
-//#define getbit (1 & (bits = (bits <= 3 ? (0x100|*src++) : (bits>>1))))
-#define getbit (((bits=bits&0x7f? bits+bits :  (((unsigned)(*src++))<<1)+1)>>8)&1)
+//#define getbit (((bits=bits&0x7f? bits+bits :  (((unsigned)(*src++))<<1)+1)>>8)&1)
+#define getbit ((bits=bits&0x7fffffff? (resbits=bits,bits+bits) :  (src+=4,resbits=*((uint32_t *)(src-4)),(resbits<<1)+1)),resbits>>31)
 #define loadbit
 
 #define getcode(bits, src, ptotal, pbreak_at) {\
@@ -92,7 +93,8 @@ getlen_0bit: ;\
 static void unpack_c(byte *src, byte *dst, int left) {
   int ofs=-1;
   int len;
-  int bits=0x80;
+  uint32_t bits=0x80000000;
+  uint32_t resbits;
   left--;
 
 copyletter:
