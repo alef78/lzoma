@@ -52,68 +52,71 @@ unpack:
 .load_ofs:
 	push %edi # save dst, we need edi as temp register
 	xor     %ebp,%ebp
-	movzxb	(%esi), %ecx
-	mov	$256, %ebx
+	movzxb	(%esi), %ecx # res=*src
+	mov	$256, %ebx # x=256
 	subl	8(%esp), %edi # here (%esp) is pushed edi, 4(%esp) is left
 
         inc     %ebp
 	inc     %esi
+	movl	$48, %edx
+	#cmp     $652630,%edi
+	#ja      .low
+	#mov     $60,%dl
+	#cmp     $49549,%edi
+	#ja      .low
+	mov     $80,%dl
+.low:
 	cmpl	%ebx, %edi
-	#movl	breaklz, %edx
-	#movl    $256,%edx
-	movl    %ebx,%edx
 	jnle	.loop_ofs
-	movl	%ebp, %ebx
+	movl	%ebp, %ebx # x=1
 	xorl	%ecx, %ecx
 	dec     %esi
 .loop_ofs:
-	subl	%ebx, %edi
+	addl	%ebx, %ebx # x+=x
+	cmp     $512,%ebx  # if x<512
+	jb      .nottopyet
+	cmp     %edx,%ecx # cmp top,res
+	ja      .ofs_final_calc
+	sub     %edx,%ebp # ofs-=top
+	add     %edx,%edi # total+=edx
+	test    $0x02afff00,%ebx
+	jz      .noshift
+	leal    (%ebx,%ebx,8),%ebx
+	shrl    $2,%ebx
+	jmp     .nottopyet
+.noshift:
+	addl    %ebx,%ebx
+
+.nottopyet:
 	cmpl    %edi,%ebx
 	jns	.ofs_last_bit
-	cmpl	%edx, %ebx
-	jle	.notbreakofs
-	addl    %eax,%eax
-	jnz	.L15
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
-	lodsl
-	adcl    %eax,%eax
-.L15:
-	jnc	.ofs_final_calc
-	addl	%ebx, %ebp
-	sall	$3, %edx
-	subl	%ebx, %edi
-.notbreakofs:
-	addl	%ebx, %edi
+	
 	addl    %eax,%eax
 	jnz	.L18
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .L18:
 	adcl    %ecx,%ecx
-	addl	%ebx, %ebx
 	jmp	.loop_ofs
 .ofs_last_bit:
-	subl    %edi,%ebx
-	cmpl	%ebx, %ecx
-	jl	.ofs_final_calc
+	shrl    $1,%ebx # x >> 1
+	subl    %ebx,%edi # total -= x
+	subl    %edi,%ebx # x-=total
+	cmpl	%ebx, %ecx # cmp x,res
+	jl	.ofs_final_calc # if res<x goto final
 	addl    %eax,%eax
 	jnz	.L21
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .L21:
 	jnc     .ofs_final_calc
-	addl    %edi,%ecx
+	subl    %ebx,%ecx
 .ofs_final_calc:
 	popl    %edi # restore dst
 	addl	%ecx, %ebp
-	cmpl	$0xD00, %ebp
+	cmpl	$5400, %ebp
 	sbb     %ebx,%ebx
-	cmpl	$0x40000, %ebp
+	cmpl	$0x60000, %ebp
 	sbb     $-2,%ebx
 	#negl	%ebp
 .load_len:

@@ -49,10 +49,10 @@ byte out_buf[MAX_SIZE];
   }\
   x>>=1;\
   total-=x;\
-  if (res>=x-total) { \
+  x-=total;\
+  if (res>=x) { \
     loadbit; res+=res+getbit;\
-    res-=(x>>1);\
-    res+=total-(x>>1);\
+    res-=x;\
   }\
 getcode_doneit: \
   ofs+=res;\

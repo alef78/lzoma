@@ -480,7 +480,6 @@ int pack(int n) {
   if (n==0) { return 0; }
 
   init_same(n);
-
   cache[n-1]=9; /* last letter cannot be packed as a lz */
   cacherle[n-1]=1;
   cacherle[n]=1;
@@ -538,9 +537,11 @@ int pack(int n) {
       }
     }
     
+    int medium = pos2sorted[used];
     pos=same[used];
     if (pos<0) goto done;
-if (notskip) {
+
+    if (notskip) {
       int tmp=1+len_encode(used-pos-1,used);
       len=samelen[used];
       //max_match=2;//my_best_len+1;//2;
@@ -596,7 +597,6 @@ if (notskip)
         }
       }
     max_match=my_best_len+1;//2;
-int medium = pos2sorted[used];
 if (!notskip) goto done;
     int top=sorted_prev[medium];
     int bottom=sorted_next[medium];
