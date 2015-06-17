@@ -21,30 +21,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define byte unsigned char
-#define MAX_SIZE 16384*1024
-//0x52398c
-// min lz is 1bit+10bits+breakbit+2bitlen=14 bit. 2 chars=18bit
-//#define longlen 0x0d00
-#define longlen 5287
-//#define hugelen 0x080000 a bit too much
-#define hugelen 0x040000
-//#define hugelen 0x020000
-#define breaklz 512
-#define lzmagic 0x1244FF00
-#define lzshift 1
-//#define lzmagic 0x11084F00
-//#define lzshift 0
-#define LZLOW 26
-//1024
-#define breaklen 4
-// level 5 / match_level 10000 compresses better but many times slower
+
+#include "lzoma.h"
 #define level 3
 #define match_level 1000
 //#define level 5
-//#define level 1
 //#define match_level 10000000
-//#define match_level 2
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
@@ -72,31 +54,9 @@ int sorted_len[MAX_SIZE];
 int sorted_prev[MAX_SIZE];
 int sorted_next[MAX_SIZE];
 
-int lzlow(int total) {
-  int top=LZLOW;
-/*  if (total <= 5158187) top = 30;
-  if (total <= 3133223) top = 32;
-  if (total <= 346475) top = 40;
-  if (total <= 28596) top = 50;
-  if (total <= 5055) top = 70;
-  if (total <= 3417) top = 80;
-  if (total <= 1750) top = 100;
-  if (total <= 950) top = 124;
-  if (total <= 929) top = 125;
-  if (total <= 901) top = 126;
-  if (total <= 880) top = 127;
-  if (total <= 848) top = 128;
-  if (total <= 259) top = 253;
-  if (total <= 258) top = 254;
-  if (total <= 257) top = 255;
-  if (total <= 256) top = 256;*/
-  return top;
-}
-
 static inline int len_encode(int num,int total) {
   register int res=0;
   register int x=1;
-  int break_at=breaklz;
 
 /*  if (total>=1024) {
     if (num<512) return 10;
@@ -106,12 +66,12 @@ static inline int len_encode(int num,int total) {
   int top = lzlow(total);
   while (1) {
     x+=x;
-    if (x>=break_at) {
+    if (x>=breaklz) {
       if (num<top) { goto doneit;}
       num+=top;
       total+=top;
       if (x & lzmagic)
-        top+=top+(top>>lzshift);
+        top=lzshift(top);
       else
         top+=top;
     }
@@ -195,21 +155,19 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   int res=0;
   int x=1;
   int obyte=0;
-  if (total > 256 && break_at >= 256)
+  if (total > 256 && break_at >= 256 && !debug)
 obyte=1;
 //  fprintf(stderr,"debug: putenc num=%d, total=%d, break_at=%d\n",num,total,break_at);
 
   int top=lzlow(total);
-  //int up=1;// 0 bits code 1 symbol
   while (1) {
     x+=x;
-    //up+=up;
     if (x>=break_at) {
       if (num<top) {  goto doneit;}
       num+=top;
       total+=top;
       if (x & lzmagic)
-      top+=top+(top>>lzshift);
+        top=lzshift(top);
       else
         top+=top;
     }
@@ -221,11 +179,6 @@ obyte=1;
     num+=(x>>1);
     num-=total-(x>>1);
     bits[res++]=2;
-/*    if (num>=(x>>1)) {
-      bits[res++]=1; num-=total-(x>>1);
-    } else {
-      bits[res++]=0;
-    }*/
   }
 
 doneit: 
@@ -831,14 +784,6 @@ int main(int argc,char *argv[]) {
     } else {
       fwrite(&bres,4,1,ofd);
       fwrite(&n,4,1,ofd);
-/*      if (breaklz==128) b=6;
-      if (breaklz==256) b=7;
-      if (breaklz==512) b=8;
-      if (breaklz==1024) b=9;
-      if (breaklz==2048) b=10;
-      if (breaklz==4096) b=11;
-      if (breaklz==8192) b=12;
-      fwrite(&b,1,1,ofd);*/
       fwrite(out_best,1,bres,ofd);
 //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
     }

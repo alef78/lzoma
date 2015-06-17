@@ -10,13 +10,7 @@
 
 #define O_BINARY 0
 #define byte unsigned char
-#define MAX_SIZE 16384*1024
-#define longlen 5287
-#define hugelen 0x40000
-#define breaklz 512
-#define breaklen 2
-#define lzmagic 0x1244FF00
-#define LZLOW 26
+#include "lzoma.h"
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
@@ -31,7 +25,7 @@ byte out_buf[MAX_SIZE];
   ofs=0;\
   long int res=0;\
   int x=1;\
-  int top=LZLOW;\
+  int top=lzlow(total);\
 \
   if (break_at >= 256 && total > 256) {\
      x=256;\
@@ -45,13 +39,9 @@ byte out_buf[MAX_SIZE];
       ofs-=top;\
       total+=top;\
       if (x & lzmagic)\
-      top+=top+(top>>1);\
+      top=lzshift(top);\
       else\
         top+=top;\
-      /*if (ofs <= top) goto getcode_doneit;*/\
-      /*ofs+=x;*/\
-      /*total-=x;*/\
-      /*break_at<<=3;*/\
     }\
     if (x>=total) break;\
     loadbit;\
