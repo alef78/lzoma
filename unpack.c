@@ -190,7 +190,7 @@ int main(int argc,char * argv[]) {
     read(ifd,in_buf,n);
     for(int t=0;t<10;t++) {
       long unsigned tsc = (long unsigned)__rdtsc();
-      unpack_c(in_buf, out_buf, n_unp);
+      unpack(in_buf, out_buf, n_unp);
       tsc=(long unsigned)__rdtsc()-tsc;
       printf("tsc=%lu\n",tsc);
     }

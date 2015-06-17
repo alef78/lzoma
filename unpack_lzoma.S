@@ -59,36 +59,36 @@ unpack:
         inc     %ebp
 	inc     %esi
 	movl	$48, %edx
-	#cmp     $652630,%edi
-	#ja      .low
-	#mov     $60,%dl
-	#cmp     $49549,%edi
-	#ja      .low
+	cmp     $652630,%edi
+	ja      .low
+	mov     $60,%dl
+	cmp     $49549,%edi
+	ja      .low
 	mov     $80,%dl
 .low:
 	cmpl	%ebx, %edi
 	jnle	.loop_ofs
 	movl	%ebp, %ebx # x=1
-	xorl	%ecx, %ecx
+	xorl	%ecx, %ecx # res=0
 	dec     %esi
 .loop_ofs:
 	addl	%ebx, %ebx # x+=x
 	cmp     $512,%ebx  # if x<512
 	jb      .nottopyet
 	cmp     %edx,%ecx # cmp top,res
-	ja      .ofs_final_calc
-	sub     %edx,%ebp # ofs-=top
-	add     %edx,%edi # total+=edx
+	jl      .ofs_final_calc # if res<top
+	subl    %edx,%ebp # ofs-=top
+	addl    %edx,%edi # total+=top
 	test    $0x02afff00,%ebx
 	jz      .noshift
-	leal    (%ebx,%ebx,8),%ebx
-	shrl    $2,%ebx
+	leal    (%edx,%edx,8),%edx # top*=9
+	shrl    $2,%edx  # top>>=2
 	jmp     .nottopyet
 .noshift:
-	addl    %ebx,%ebx
+	addl    %edx,%edx
 
 .nottopyet:
-	cmpl    %edi,%ebx
+	cmpl    %edi,%ebx # cmp total,x
 	jns	.ofs_last_bit
 	
 	addl    %eax,%eax
@@ -109,11 +109,12 @@ unpack:
 	lodsl
 	adcl    %eax,%eax
 .L21:
-	jnc     .ofs_final_calc
-	subl    %ebx,%ecx
+	adcl    %ecx,%ecx
+	#jnc     .ofs_final_calc
+	subl    %ebx,%ecx # res-=x
 .ofs_final_calc:
 	popl    %edi # restore dst
-	addl	%ecx, %ebp
+	addl	%ecx, %ebp # ofs+=res
 	cmpl	$5400, %ebp
 	sbb     %ebx,%ebx
 	cmpl	$0x60000, %ebp
