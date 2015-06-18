@@ -66,6 +66,7 @@ static inline int len_encode(int num,int total) {
   int top = lzlow(total);
   while (1) {
     x+=x;
+    if (x>=total+top) break; /* only 1 bit to be outputted left */
     if (x>=breaklz) {
       if (num<top) { goto doneit;}
       num+=top;
@@ -75,7 +76,6 @@ static inline int len_encode(int num,int total) {
       else
         top+=top;
     }
-    if (x>=total) break; /* only 1 bit to be outputted left */
     res++;
   }
   if (num>=x-total) { res++;}
@@ -157,12 +157,14 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   int obyte=0;
   if (total > 256 && break_at >= 256 && !debug)
 obyte=1;
-//  fprintf(stderr,"debug: putenc num=%d, total=%d, break_at=%d\n",num,total,break_at);
+//if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
 
   int top=lzlow(total);
   while (1) {
     x+=x;
+    if (x>=total+top) break; /* only 1 bit to be outputted left */
     if (x>=break_at) {
+      //if (top==0) top=lzlow(top);
       if (num<top) {  goto doneit;}
       num+=top;
       total+=top;
@@ -171,10 +173,8 @@ obyte=1;
       else
         top+=top;
     }
-    if (x>=total) break; /* only 1 bit to be outputted left */
     bits[res++]=2;
   }
-
   if (num>=x-total) {
     num+=x-total;
     bits[res++]=2;
@@ -757,7 +757,7 @@ int main(int argc,char *argv[]) {
   if (argc<3) {
     printf("usage: lzoma input output\n");
     int i;
-    int total=16*1024*1024;
+    int total=atoi(argv[1]);//16*1024*1024;
     for(i=0;i<total;i++) {
       printf("%04d:",i);
       putenc(i, total,breaklz, 1);

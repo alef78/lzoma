@@ -34,6 +34,7 @@ byte out_buf[MAX_SIZE];
 \
   while (1) {\
     x+=x;\
+    if (x>=total+top) break;\
     if (x>=512) {\
       if (res<top) {  goto getcode_doneit;}\
       ofs-=top;\
@@ -43,7 +44,6 @@ byte out_buf[MAX_SIZE];
       else\
         top+=top;\
     }\
-    if (x>=total) break;\
     loadbit;\
     res+=res+getbit;\
   }\
@@ -188,7 +188,7 @@ int main(int argc,char * argv[]) {
     read(ifd,in_buf,n);
     for(int t=0;t<10;t++) {
       long unsigned tsc = (long unsigned)__rdtsc();
-      unpack(in_buf, out_buf, n_unp);
+      unpack_c(in_buf, out_buf, n_unp);
       tsc=(long unsigned)__rdtsc()-tsc;
       printf("tsc=%lu\n",tsc);
     }
