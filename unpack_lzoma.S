@@ -100,8 +100,6 @@ unpack:
 	js	.loop_ofs0
 
 .ofs_last_bit:
-	shrl    $1,%ebx # x >> 1
-	subl    %ebx,%edi # total -= x
 	subl    %edi,%ebx # x-=total
 	cmpl	%ebx, %ecx # cmp x,res
 	jl	.ofs_final_calc # if res<x goto final

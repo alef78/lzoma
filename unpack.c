@@ -47,8 +47,6 @@ byte out_buf[MAX_SIZE];
     loadbit;\
     res+=res+getbit;\
   }\
-  x>>=1;\
-  total-=x;\
   x-=total;\
   if (res>=x) { \
     loadbit; res+=res+getbit;\

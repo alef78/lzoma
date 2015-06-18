@@ -176,8 +176,7 @@ obyte=1;
   }
 
   if (num>=x-total) {
-    num+=(x>>1);
-    num-=total-(x>>1);
+    num+=x-total;
     bits[res++]=2;
   }
 
