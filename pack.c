@@ -166,7 +166,7 @@ obyte=1;
       if (num<top) {  goto doneit;}
       num+=top;
       total+=top;
-      if (x & lzmagic)
+      if (x & lzmagic) 
         top=lzshift(top);
       else
         top+=top;
