@@ -68,36 +68,37 @@ unpack:
 .low:
 	cmpl	%ebx, %edi
 	jnle	.loop_ofs
-	movl	%ebp, %ebx # x=1
+	lea	(%ebp,%ebp), %ebx # x=2
 	xorl	%ecx, %ecx # res=0
 	dec     %esi
-.loop_ofs:
-	addl	%ebx, %ebx # x+=x
-	cmp     $512,%ebx  # if x<512
-	jb      .nottopyet
-	cmp     %edx,%ecx # cmp top,res
-	jl      .ofs_final_calc # if res<top
-	subl    %edx,%ebp # ofs-=top
-	addl    %edx,%edi # total+=top
-	test    $0x02afff00,%ebx
-	jz      .noshift
-	leal    (%edx,%edx,8),%edx # top*=9
-	shrl    $2,%edx  # top>>=2
-	jmp     .nottopyet
-.noshift:
-	addl    %edx,%edx
-
-.nottopyet:
-	cmpl    %edi,%ebx # cmp total,x
-	jns	.ofs_last_bit
-	
+.loop_ofs0:
 	addl    %eax,%eax
 	jnz	.L18
 	lodsl
 	adcl    %eax,%eax
 .L18:
 	adcl    %ecx,%ecx
-	jmp	.loop_ofs
+	#cmp     $256,%ebx  # if x<256
+	#jb      .nottopyet
+	test      %bl,%bl
+	jnz      .nottopyet
+.loop_ofs:
+	cmp     %edx,%ecx # cmp top,res
+	jl      .ofs_final_calc # if res<top
+	subl    %edx,%ebp # ofs-=top
+	addl    %edx,%edi # total+=top
+	test    $0x0157ff80,%ebx
+	jz      .noshift
+	leal    (%edx,%edx,8),%edx # top*=9
+	shrl    $2,%edx  # top>>=2
+	jmp     .nottopyet
+.noshift:
+	addl    %edx,%edx
+.nottopyet:
+	addl	%ebx, %ebx # x+=x
+	cmpl    %edi,%ebx # cmp total,x
+	js	.loop_ofs0
+
 .ofs_last_bit:
 	shrl    $1,%ebx # x >> 1
 	subl    %ebx,%edi # total -= x
