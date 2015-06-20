@@ -64,17 +64,17 @@ static inline int len_encode(int num,int total) {
     res=9;
   }*/
   int top = lzlow(total);
+  if (total<=256) top=0;
   while (1) {
     x+=x;
     if (x>=total+top) break; /* only 1 bit to be outputted left */
+      if (x & lzmagic)
+        top=lzshift(top);
     if (x>=breaklz) {
       if (num<top) { goto doneit;}
       num+=top;
       total+=top;
-      if (x & lzmagic)
-        top=lzshift(top);
-      else
-        top+=top;
+      top+=top;
     }
     res++;
   }
@@ -160,18 +160,18 @@ obyte=1;
 //if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
 
   int top=lzlow(total);
+  if (total<=256) top=0;
   while (1) {
     x+=x;
     if (x>=total+top) break; /* only 1 bit to be outputted left */
+      if (x & lzmagic) 
+        top=lzshift(top);
     if (x>=break_at) {
       //if (top==0) top=lzlow(top);
       if (num<top) {  goto doneit;}
       num+=top;
       total+=top;
-      if (x & lzmagic) 
-        top=lzshift(top);
-      else
-        top+=top;
+      top+=top;
     }
     bits[res++]=2;
   }

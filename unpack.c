@@ -19,15 +19,15 @@ byte out_buf[MAX_SIZE];
 #define getbit ((bits=bits&0x7fffffff? (resbits=bits,bits+bits) :  (src+=4,resbits=*((uint32_t *)(src-4)),(resbits<<1)+1)),resbits>>31)
 #define loadbit
 
-#define getcode(bits, src, ptotal, pbreak_at) {\
+#define getcode(bits, src, ptotal) {\
   int total = (ptotal);\
-  int break_at = pbreak_at; \
   ofs=0;\
   long int res=0;\
   int x=1;\
-  int top=lzlow(total);\
+  int top=0;\
 \
-  if (break_at >= 256 && total > 256) {\
+  if (total > 256) {\
+     top=lzlow(total);\
      x=256;\
      res=*src++;\
   }\
@@ -35,14 +35,13 @@ byte out_buf[MAX_SIZE];
   while (1) {\
     x+=x;\
     if (x>=total+top) break;\
+    if (x & lzmagic)\
+      top=lzshift(top);\
     if (x>=512) {\
       if (res<top) {  goto getcode_doneit;}\
       ofs-=top;\
       total+=top;\
-      if (x & lzmagic)\
-      top=lzshift(top);\
-      else\
-        top+=top;\
+      top+=top;\
     }\
     loadbit;\
     res+=res+getbit;\
@@ -108,7 +107,7 @@ get_bit:
   } else
 //fprintf(stderr,"\nn");
   len=2;
-  getcode(bits,src,dst-out_buf,breaklz);
+  getcode(bits,src,dst-out_buf);
   ofs++;
   if (ofs>=longlen) len++;
   if (ofs>=hugelen) len++;
