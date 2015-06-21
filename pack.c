@@ -58,13 +58,8 @@ static inline int len_encode(int num,int total) {
   register int res=0;
   register int x=1;
 
-/*  if (total>=1024) {
-    if (num<512) return 10;
-    x=512;
-    res=9;
-  }*/
   int top = lzlow(total);
-  if (total<=256) top=0;
+  if (total<=256) return 8;//top=0;
   while (1) {
     x+=x;
     if (x>=total+top) break; /* only 1 bit to be outputted left */
@@ -155,15 +150,23 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   int res=0;
   int x=1;
   int obyte=0;
-  if (total > 256 && break_at >= 256 && !debug)
+//  if (total > 256 && break_at >= 256 && !debug)
 obyte=1;
+bits[0]=0;
+bits[1]=0;
+bits[2]=0;
+bits[3]=0;
+bits[4]=0;
+bits[5]=0;
+bits[6]=0;
+bits[7]=0;
 //if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
 
   int top=lzlow(total);
-  if (total<=256) top=0;
+  //if (total<=256) top=0;
   while (1) {
     x+=x;
-    if (x>=total+top) break; /* only 1 bit to be outputted left */
+    if (x>=512&& x>=total+top) break; /* only 1 bit to be outputted left */
       if (x & lzmagic) 
         top=lzshift(top);
     if (x>=break_at) {
@@ -181,6 +184,9 @@ obyte=1;
   }
 
 doneit: 
+  for(;res<8;res++) {
+    bits[res++]=2;
+  }
   for(x=res-1;x>=0;x--) {
     if (bits[x]==2) {
       bits[x]=num&1;
@@ -190,8 +196,11 @@ doneit:
   if (obyte) {
   //printf("res=%d\n", res);
   byte b=0;
-  for(x=0;x<8;x++) 
+  for(x=0;x<8;x++) {
+    if (debug) printf("%d",bits[x]);
     if (bits[x]) b|=128>>x;
+  }
+  if (debug) printf(" ");
   out_buf[outpos++]=b;
   for(;x<res;x++) {
     if (debug) printf("%d",bits[x]);
@@ -200,8 +209,7 @@ doneit:
   }
   else 
   for(x=0;x<res;x++) {
-    if (debug)
-    printf("%d",bits[x]);
+    if (debug) printf("%d",bits[x]);
     putbit(bits[x]);
   }
 }
@@ -758,7 +766,7 @@ int main(int argc,char *argv[]) {
     printf("usage: lzoma input output\n");
     int i;
     int total=atoi(argv[1]);//16*1024*1024;
-    for(i=0;i<total;i++) {
+    for(i=total-10;i<total;i++) {
       printf("%04d:",i);
       putenc(i, total,breaklz, 1);
       printf("\n");

@@ -26,23 +26,23 @@ byte out_buf[MAX_SIZE];
   int x=1;\
   int top=0;\
 \
-  if (total > 256) {\
+  /*if (total > 256) {*/\
      top=lzlow(total);\
      x=256;\
      res=*src++;\
-  }\
+  /*}*/\
 \
   while (1) {\
     x+=x;\
     if (x>=total+top) break;\
     if (x & lzmagic)\
       top=lzshift(top);\
-    if (x>=512) {\
+    /*if (x>=512) {*/\
       if (res<top) {  goto getcode_doneit;}\
       ofs-=top;\
       total+=top;\
       top+=top;\
-    }\
+    /*}*/\
     loadbit;\
     res+=res+getbit;\
   }\
