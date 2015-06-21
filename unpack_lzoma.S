@@ -29,8 +29,6 @@ unpack:
 .checkleft: 
 	addl    %eax,%eax
 	jnz	.nonextbit
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .nonextbit:
@@ -42,8 +40,6 @@ unpack:
 	jnz	.load_ofs
 	addl    %eax,%eax
 	jnz	.L9
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .L9:
@@ -66,38 +62,29 @@ unpack:
 	ja      .low
 	mov     $80,%dl
 .low:
-	cmpl	%ebx, %edi
-	jnle	.loop_ofs
-	lea	(%ebp,%ebp), %ebx # x=2
-	xorl	%ecx, %ecx # res=0
-	dec     %esi
-.loop_ofs0:
+.loop_ofs:
+	addl	%ebx, %ebx # x+=x
+	addl    %edi,%edx # top+=total
+	cmpl    %edx,%ebx # cmp total+top,x
+	jns     .ofs_last_bit
+	subl    %edi,%edx # top-=total
+	test    $0x055ffc00,%ebx
+	jz      .noshift
+	leal    (%edx,%edx,8),%edx # top*=9
+	shrl    $3,%edx  # top>>=3
+.noshift:
+	cmp     %edx,%ecx # cmp top,res
+	jl      .ofs_final_calc # if res<top
+	subl    %edx,%ebp # ofs-=top
+	addl    %edx,%edi # total+=top
+	addl    %edx,%edx # top+=top
 	addl    %eax,%eax
 	jnz	.L18
 	lodsl
 	adcl    %eax,%eax
 .L18:
 	adcl    %ecx,%ecx
-	#cmp     $256,%ebx  # if x<256
-	#jb      .nottopyet
-	test      %bl,%bl
-	jnz      .nottopyet
-.loop_ofs:
-	cmp     %edx,%ecx # cmp top,res
-	jl      .ofs_final_calc # if res<top
-	subl    %edx,%ebp # ofs-=top
-	addl    %edx,%edi # total+=top
-	test    $0x0157ff80,%ebx
-	jz      .noshift
-	leal    (%edx,%edx,8),%edx # top*=9
-	shrl    $2,%edx  # top>>=2
-	jmp     .nottopyet
-.noshift:
-	addl    %edx,%edx
-.nottopyet:
-	addl	%ebx, %ebx # x+=x
-	cmpl    %edi,%ebx # cmp total,x
-	js	.loop_ofs0
+	jmp	.loop_ofs
 
 .ofs_last_bit:
 	subl    %edi,%ebx # x-=total
@@ -109,7 +96,6 @@ unpack:
 	adcl    %eax,%eax
 .L21:
 	adcl    %ecx,%ecx
-	#jnc     .ofs_final_calc
 	subl    %ebx,%ecx # res-=x
 .ofs_final_calc:
 	popl    %edi # restore dst
@@ -118,20 +104,15 @@ unpack:
 	sbb     %ebx,%ebx
 	cmpl	$0x60000, %ebp
 	sbb     $-2,%ebx
-	#negl	%ebp
 .load_len:
 	addl    %eax,%eax
 	jnz	.len2b
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .len2b:
 	jc	.lenlonger
 	addl    %eax,%eax
 	jnz	.len2b2
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .len2b2:
@@ -147,8 +128,6 @@ unpack:
 	addl	%edx, %edx
 	addl    %eax,%eax
 	jnz	.L26
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .L26:
@@ -156,8 +135,6 @@ unpack:
 
 	addl    %eax,%eax
 	jnz	.L29
-	#mov	(%esi), %eax
-	#lea	4(%esi),%esi
 	lodsl
 	adcl    %eax,%eax
 .L29:
