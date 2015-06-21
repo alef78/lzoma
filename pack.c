@@ -178,8 +178,9 @@ bits[7]=0;
     }
     bits[res++]=2;
   }
-  if (num>=x-total) {
-    num+=x-total;
+  x-=total;
+  if (num>=x) {
+    num+=x;
     bits[res++]=2;
   }
 

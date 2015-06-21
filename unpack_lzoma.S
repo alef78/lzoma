@@ -47,14 +47,14 @@ unpack:
 	jnc	.load_len
 .load_ofs:
 	push %edi # save dst, we need edi as temp register
-	xor     %ebp,%ebp
+	xor     %ebp,%ebp # ofs=0
 	movzxb	(%esi), %ecx # res=*src
-	mov	$256, %ebx # x=256
+	mov	$512, %ebx # x=256
 	subl	8(%esp), %edi # here (%esp) is pushed edi, 4(%esp) is left
-
-        inc     %ebp
+        inc     %ebp # ofs++
 	inc     %esi
-	movl	$48, %edx
+	#movl	$48, %edx
+	lea     47(%ebp),%edx
 	cmp     $652630,%edi
 	ja      .low
 	mov     $60,%dl
@@ -63,7 +63,6 @@ unpack:
 	mov     $80,%dl
 .low:
 .loop_ofs:
-	addl	%ebx, %ebx # x+=x
 	addl    %edi,%edx # top+=total
 	cmpl    %edx,%ebx # cmp total+top,x
 	jns     .ofs_last_bit
@@ -84,6 +83,7 @@ unpack:
 	adcl    %eax,%eax
 .L18:
 	adcl    %ecx,%ecx
+	addl	%ebx, %ebx # x+=x
 	jmp	.loop_ofs
 
 .ofs_last_bit:
