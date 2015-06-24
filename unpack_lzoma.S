@@ -15,8 +15,8 @@ unpack:
 	movl	24(%esp), %edi # edi = output buffer
         pushl   %edi # save output buffer start in stack
 	xorl	%ebp, %ebp
-	movl    $0x80000000,%eax
 	incl    %ebp # ebp = offset = -1
+	movl    $0x80000000,%eax
 .copyletter:
 	movsb
 	#movb	(%esi), %cl   # cl = *src
