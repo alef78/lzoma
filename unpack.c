@@ -99,14 +99,14 @@ get_bit:
   /* unpack lz */
   if (len<0) {
 //fprintf(stderr,"\nw");
-    len=2;
+    len=1;
     loadbit;
     if (!getbit) {
       goto uselastofs;
     }
-  } else
-//fprintf(stderr,"\nn");
+  }
   len=2;
+//fprintf(stderr,"\nn");
   getcode(bits,src,dst-out_buf);
   ofs++;
   if (ofs>=longlen) len++;
@@ -187,7 +187,7 @@ int main(int argc,char * argv[]) {
     read(ifd,in_buf,n);
     for(int t=0;t<10;t++) {
       long unsigned tsc = (long unsigned)__rdtsc();
-      unpack(in_buf, out_buf, n_unp);
+      unpack_c(in_buf, out_buf, n_unp);
       tsc=(long unsigned)__rdtsc()-tsc;
       printf("tsc=%lu\n",tsc);
     }
