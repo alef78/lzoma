@@ -464,7 +464,7 @@ static inline int min(int a,int b) {
           if (best_ofs[used+k]==pos-used) {\
             int tmp2=tmp+len_olz_minus_lz(used-pos,best_len[used+k],used+k);\
             tmp2+=cache[used+k];\
-            if (tmp2<res) {\
+            if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {\
               res=tmp2;\
               my_best_ofs=pos-used;\
               my_best_len=len;\
@@ -478,7 +478,7 @@ static inline int min(int a,int b) {
             for (j=MINOLEN;j<olen;j+=cacherle[used+k+j]) {\
               int tmp2=tmp+1+1+len_encode_ol(j+2-MINOLEN);\
               tmp2+=cache[used+k+j];\
-              if (tmp2<res) {\
+              if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {\
                 res=tmp2;\
                 my_best_ofs=pos-used;\
                 my_best_len=len;\
@@ -506,7 +506,7 @@ static inline int min(int a,int b) {
 			tmp3+=jj*9+2+len_encode_ol(jjj+2-MINOLEN);\
 			tmp3+=cache[used+k+olen+jj+jjj];\
 			if (tmp3<0) { tmp3+=tmp2;\
-              if (tmp3<res) {\
+              if (tmp3<res || (tmp3==res && my_best_ofs<pos-used)) {\
                 res=tmp3;\
                 my_best_ofs=pos-used;\
                 my_best_len=len;\
@@ -520,7 +520,7 @@ static inline int min(int a,int b) {
 	            break;\
 	        }\
               }\
-              if (tmp2<res) {\
+              if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {\
                 res=tmp2;\
                 my_best_ofs=pos-used;\
                 my_best_len=len;\
@@ -696,7 +696,7 @@ if (!notskip) goto done;
       for(j=MINLZ+1+ll;j<=len;j+=cacherle[used+j]) {
         int tmp2=tmp+len_encode_l(j-1-ll-MINLZ+2);
         tmp2+=cache[used+j];
-        if (tmp2<=res) {
+        if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {
           res=tmp2;
           my_best_ofs=pos-used;
           my_best_len=j;
@@ -864,7 +864,7 @@ int main(int argc,char *argv[]) {
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
     printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
-    e8(n);
+    //e8(n);
     //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
