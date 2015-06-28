@@ -103,7 +103,7 @@ unpack:
 	cmpl	$5400, %ebp
 	sbb     %ebx,%ebx
 	cmpl	$0x60000, %ebp
-	sbb     $-2,%ebx
+	sbb     $-3,%ebx
 .load_len:
 	addl    %eax,%eax
 	jnz	.len2b
@@ -116,11 +116,11 @@ unpack:
 	lodsl
 	adcl    %eax,%eax
 .len2b2:
-	adcl    $2,%ebx
+	adcl    $1,%ebx
 	jmp	.copy_match
 
 .lenlonger:
-	addl	$3, %ebx
+	addl	$2, %ebx
 	movl	$1, %edx
 	xorl	%ecx, %ecx
 .lenloop:

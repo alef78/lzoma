@@ -864,7 +864,7 @@ int main(int argc,char *argv[]) {
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
     printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
-    //e8(n);
+    e8(n);
     //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
