@@ -29,6 +29,11 @@
 #define match_level 1000
 //#define level 5
 //#define match_level 10000000
+FILE *flzlit=NULL;
+FILE *flit=NULL;
+FILE *folz=NULL;
+FILE *flen=NULL;
+FILE *fdist=NULL;
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
@@ -156,11 +161,21 @@ static inline void putbit(int bit) {
   if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;//out_buf[lastpos]|=bit_cnt;
 }
 
+int stlet=0;
+int stlz=0;
+int stolz=0;
+int bitslzlen=0;
+int bitsolzlen=0;
+int bitslen=0;
+int bitsdist=0;
+int bitslit=0;
+
 static inline void putenc(int num,int total, int break_at, int debug) {
   char bits[100];
   int res=0;
   int x=1;
   int obyte=0;
+if (fdist) fwrite(&num,1,4,fdist);
 //  if (total > 256 && break_at >= 256 && !debug)
 obyte=1;
 bits[0]=0;
@@ -224,6 +239,7 @@ doneit:
     if (debug) printf("%d",bits[x]);
     putbit(bits[x]);
   }
+  bitsdist+=res;
 }
 
 static inline void putenc_l(int num, int break_at) {
@@ -231,10 +247,13 @@ static inline void putenc_l(int num, int break_at) {
   int res=0;
   int x=1;
   int obyte=0;
+if (flen) fwrite(&num,1,1,flen);
+//fprintf(stderr,"%c",num);
+//fprintf(stderr,"%c",num>>8);
   
-  if (num==0) { putbit(0);putbit(0);return;}
-  if (num==1) { putbit(0);putbit(1);return;}
-  putbit(1);num-=2;
+  if (num==0) {bitslen+=2; putbit(0);putbit(0);return;}
+  if (num==1) {bitslen+=2; putbit(0);putbit(1);return;}
+  putbit(1);num-=2;bitslen++;
 
   while (1) {
     x+=x;
@@ -255,6 +274,7 @@ static inline void putenc_l(int num, int break_at) {
   for(x=0;x<res;x++) {
     putbit(bits[x]);
   }
+  bitslen+=res;
 }
 
 int old_ofs=0;
@@ -268,27 +288,27 @@ void initout(void) {
   was_letter=1;
 }
 
-int stlet=0;
-int stlz=0;
-int stolz=0;
 static inline void put_lz(int offset,int length,int used) {
-  putbit(1);
+  if (flzlit) fprintf(flzlit,"%c",1);
+  putbit(1); bitslzlen++;
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
   length-=MINLZ;
 //fprintf(stderr,was_letter?"\nw":"n");
 //printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
-  if (was_letter) {
+  if (was_letter) { bitsolzlen++;
     was_letter=0;
     if (old_ofs==offset) {
 //fprintf(stderr,"o%d\n",length);
     stolz++;
+    if (folz) fprintf(folz,"%c",0);
       putbit(0);
       //putenc_l(0,breaklen);
       //length^=1;
       putenc_l(length+2-MINOLEN,breaklen);
       return;
     }
+    if (folz) fprintf(folz,"%c",1);
     //putenc_l(0,breaklen);
     putbit(1);
     //length++;
@@ -304,9 +324,10 @@ static inline void put_lz(int offset,int length,int used) {
 }
 
 static inline void put_letter(byte b) {
-//fprintf(stderr,"%c",b);
-  putbit(0);
-  out_buf[outpos++]=b;
+  if (flzlit) fprintf(flzlit,"%c",0);
+  if (flit) fprintf(flit,"%c",b);
+  putbit(0); bitslzlen++;
+  out_buf[outpos++]=b; bitslit+=8;
   was_letter++;
   stlet++;
 }
@@ -821,7 +842,7 @@ int main(int argc,char *argv[]) {
   byte b;
 
   if (argc<3) {
-    printf("usage: lzoma input output\n");
+    printf("usage: lzoma input output [lzlit lit olz len dist]\n");
     int i;
     int total=atoi(argv[1]);//16*1024*1024;
     for(i=total-10;i<total;i++) {
@@ -836,6 +857,11 @@ int main(int argc,char *argv[]) {
   char *ouf=argv[arg++];
   ifd=fopen(inf,"rb");
   ofd=fopen(ouf,"wb");
+  if (arg<argc) flzlit=fopen(argv[arg++],"wb");
+  if (arg<argc) flit=fopen(argv[arg++],"wb");
+  if (arg<argc) folz=fopen(argv[arg++],"wb");
+  if (arg<argc) flen=fopen(argv[arg++],"wb");
+  if (arg<argc) fdist=fopen(argv[arg++],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
     printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
     e8(n);
@@ -854,6 +880,7 @@ int main(int argc,char *argv[]) {
     }
   }
   printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);
+  printf("bits lzlit=%d let=%d olz=%d match=%d len=%d\n",bitslzlen,bitslit,bitsolzlen,bitsdist,bitslen);
   close(ifd);
   close(ofd);
   return 0;
