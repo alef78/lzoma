@@ -319,12 +319,7 @@ static inline void put_lz(int offset,int length,int used) {
   length-=MINLZ;
   stlz++;
 //fprintf(stderr,"l%d %d\n",length,offset);
-/*  if (offset+1>=longlen) { length--; }
-  if (offset+1>=hugelen) { length--; }
-  int save1=offset>old_ofs?1:0;
-  putenc(offset-save1,used-1,breaklz, 0);
-  putenc_l(length-MINLZ+2,breaklen);
-*/ 
+#if LZX
   int total=used;
   int h=min(used,hugelen);
   int l=min(used,longlen);
@@ -337,6 +332,14 @@ static inline void put_lz(int offset,int length,int used) {
     putenc(offset+l+h,total,breaklz, 0);
     putenc_l(length-2,breaklen);
   }
+#else
+  if (offset+1>=longlen) { length--; }
+  if (offset+1>=hugelen) { length--; }
+  //int save1=offset>old_ofs?1:0;
+  putenc(offset/*-save1*/,used/*-1*/,breaklz, 0);
+  putenc_l(length-MINLZ+2,breaklen);
+ 
+#endif
 
   old_ofs=offset;
 }
@@ -353,7 +356,7 @@ static inline void put_letter(byte b) {
 static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
   int res=1; /* 1 bit = not a letter */
-
+#if LZX
   int l=min(used,longlen);
   int h=min(used,hugelen);
   used+=l+h;
@@ -364,14 +367,15 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
     return res+len_encode(offset+l,used);
   res+=len_encode(offset+l+h,used);
   res+=len_encode_l(length-MINLZ+2-2);
-/*  if (offset>=longlen) { length--; }
+#else
+  if (offset>=longlen) { length--; }
   if (offset>=hugelen) { length--; }
 
   offset--; // 0.. 
 
   res+=len_encode(offset,used);
-  res+=len_encode_l(length-MINLZ+2);*/
-
+  res+=len_encode_l(length-MINLZ+2);
+#endif
   return res;
 }
 
