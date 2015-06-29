@@ -288,12 +288,15 @@ void initout(void) {
   was_letter=1;
 }
 
+static inline int min(int a,int b) {
+  return a<b? a:b;
+}
+
 static inline void put_lz(int offset,int length,int used) {
   if (flzlit) fprintf(flzlit,"%c",1);
   putbit(1); bitslzlen++;
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
-  length-=MINLZ;
 //fprintf(stderr,was_letter?"\nw":"n");
 //printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
   if (was_letter) { bitsolzlen++;
@@ -305,7 +308,7 @@ static inline void put_lz(int offset,int length,int used) {
       putbit(0);
       //putenc_l(0,breaklen);
       //length^=1;
-      putenc_l(length+2-MINOLEN,breaklen);
+      putenc_l(length-MINOLEN,breaklen);
       return;
     }
     if (folz) fprintf(folz,"%c",1);
@@ -313,13 +316,28 @@ static inline void put_lz(int offset,int length,int used) {
     putbit(1);
     //length++;
   }
+  length-=MINLZ;
   stlz++;
-  if (offset+1>=longlen) { length--; }
-  if (offset+1>=hugelen) { length--; }
 //fprintf(stderr,"l%d %d\n",length,offset);
-  putenc(offset,used,breaklz, 0);
+/*  if (offset+1>=longlen) { length--; }
+  if (offset+1>=hugelen) { length--; }
+  int save1=offset>old_ofs?1:0;
+  putenc(offset-save1,used-1,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
- 
+*/ 
+  int total=used;
+  int h=min(used,hugelen);
+  int l=min(used,longlen);
+  total+=h+l;
+  if (length==0) {
+    putenc(offset,total,breaklz, 0);
+  } else if (length==1) {
+    putenc(offset+l,total,breaklz, 0);
+  } else {
+    putenc(offset+l+h,total,breaklz, 0);
+    putenc_l(length-2,breaklen);
+  }
+
   old_ofs=offset;
 }
 
@@ -336,25 +354,35 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
                                                     // if offset=>0xD00  length>=3
   int res=1; /* 1 bit = not a letter */
 
-  if (offset>=longlen) { length--; }
+  int l=min(used,longlen);
+  int h=min(used,hugelen);
+  used+=l+h;
+  offset--;
+  if (length==2)
+    return res+len_encode(offset,used);
+  if (length==3)
+    return res+len_encode(offset+l,used);
+  res+=len_encode(offset+l+h,used);
+  res+=len_encode_l(length-MINLZ+2-2);
+/*  if (offset>=longlen) { length--; }
   if (offset>=hugelen) { length--; }
 
-  offset--; /* 0.. */
+  offset--; // 0.. 
 
   res+=len_encode(offset,used);
-  res+=len_encode_l(length-MINLZ+2);
+  res+=len_encode_l(length-MINLZ+2);*/
 
   return res;
 }
 
 static inline int len_olz_minus_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
-  int res=1;//because olz
-  int ll=(offset>=longlen) ? 1:0;
-  if (offset>=hugelen) ll=2;
-   { res+=len_encode_ol(length+2-MINOLEN)-len_encode_l(length-MINLZ+2-ll); }
-  offset--; /* 0.. */
-  return res-len_encode(offset,used);
+  int res=2;//because olz
+  //int ll=(offset>=longlen) ? 1:0;
+  //if (offset>=hugelen) ll=2;
+   { res+=len_encode_ol(length+2-MINOLEN); }
+  //offset--; /* 0.. */
+  return res-len_lz(offset,length,used);
 }
 
 static inline int cmpstr(int src,int src2) {
@@ -447,10 +475,6 @@ void init_same(int n) {
 
 static inline int max(int a,int b) {
   return a>b? a:b;
-}
-
-static inline int min(int a,int b) {
-  return a<b? a:b;
 }
 
 #define CHECK_OLZ \
@@ -595,7 +619,7 @@ int pack(int n) {
                 my_use_olz=use_olz[used+1];
                 my_olz_len=olz_len[used+1];
 	      }
-		notskip = 0;
+	if (my_best_len>=5)	notskip = 0;
 //              goto done;
             }
           }
@@ -608,7 +632,7 @@ int pack(int n) {
     if (pos<0) goto done;
 
     if (notskip) {
-      int tmp=1+len_encode(used-pos-1,used);
+      int tmp=0;//+len_encode(used-pos-1,used);
       len=samelen[used];
       //max_match=2;//my_best_len+1;//2;
       //if (used-pos>=longlen) { max_match++;}
@@ -616,7 +640,7 @@ int pack(int n) {
       if (used-pos>=hugelen) ll=2;
       for(j=MINLZ+ll;j<=len;j+=cacherle[used+j]) {
       //for(j=len;j>=max_match;j-=len_encode_l_dec(j-ll)) {
-        int tmp2=tmp+len_encode_l(2-MINLZ+j-ll);
+        int tmp2=tmp+len_lz(used-pos,2-MINLZ+j,used);
         tmp2+=cache[used+j];
         if (tmp2<res) {
           res=tmp2;
@@ -645,9 +669,9 @@ if (notskip)
           len+=cmpstr(used+len,pos+len);
         } 
         if (len>max_match) {
-          int tmp=1+len_encode(used-pos-1,used);
+          int tmp=0;//+len_encode(used-pos-1,used);
           for(j=max_match+1;j<=len;j+=cacherle[used+j]) {
-            int tmp2=tmp+len_encode_l(j-MINLZ+2);
+            int tmp2=tmp+len_lz(used-pos,j-MINLZ+2,used);
             tmp2+=cache[used+j];
             if (tmp2<res) {
               res=tmp2;
@@ -691,10 +715,10 @@ if (!notskip) goto done;
       if (len<=MINLZ) goto done;
       if (my_min_ofs>used-pos) {
       my_min_ofs=used-pos;//we are checking matches in decreasing order. we need to check next matches only if those are shorter
-      int tmp=1+len_encode(used-pos-1,used);
+      int tmp=0;//+len_encode(used-pos-1,used);
       int ll=(used-pos>=hugelen)?1:0;
       for(j=MINLZ+1+ll;j<=len;j+=cacherle[used+j]) {
-        int tmp2=tmp+len_encode_l(j-1-ll-MINLZ+2);
+        int tmp2=tmp+len_lz(used-pos,j-MINLZ+2,used);
         tmp2+=cache[used+j];
         if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {
           res=tmp2;
