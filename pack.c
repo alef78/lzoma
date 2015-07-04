@@ -23,6 +23,7 @@
 
 
 #include "lzoma.h"
+#include "bpe.h"
 #define MINOLEN 1
 #define MINLZ 2
 #define level 3
@@ -38,6 +39,10 @@ FILE *fdist=NULL;
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
 byte out_best[MAX_SIZE];
+
+int bpe_ofs[MAX_SIZE];
+int bpe_rofs[MAX_SIZE];
+int bpe_total[MAX_SIZE];
 
 int use_olz[MAX_SIZE];
 int olz_len[MAX_SIZE];
@@ -96,6 +101,14 @@ num-=2;
 }
 
 static inline int len_encode_l(int num) {//num>=2
+//num-=2;
+//if (num<7) return 3;
+//num-=7;
+//#define SKEW 3
+//num+=2;
+//  return SKEW+((31-__builtin_clz(num))<<1);
+
+
 if (num<4) return 2;// 00 01
 num-=2;
 //#define SKEW 1
@@ -247,7 +260,7 @@ static inline void putenc_l(int num, int break_at) {
   int res=0;
   int x=1;
   int obyte=0;
-if (flen) fwrite(&num,1,1,flen);
+if (flen) fwrite(&num,1,4,flen);
 //fprintf(stderr,"%c",num);
 //fprintf(stderr,"%c",num>>8);
   
@@ -318,7 +331,6 @@ static inline void put_lz(int offset,int length,int used) {
   }
   length-=MINLZ;
   stlz++;
-//fprintf(stderr,"l%d %d\n",length,offset);
 #if LZX
   int total=used;
   int h=min(used,hugelen);
@@ -335,10 +347,14 @@ static inline void put_lz(int offset,int length,int used) {
 #else
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
+static int avg=0;
+avg+=offset;avg>>=1;
+static int avgl=0;
+avgl+=length;avgl>>=1;
+fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
   //int save1=offset>old_ofs?1:0;
   putenc(offset/*-save1*/,used/*-1*/,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
- 
 #endif
 
   old_ofs=offset;
@@ -351,6 +367,11 @@ static inline void put_letter(byte b) {
   out_buf[outpos++]=b; bitslit+=8;
   was_letter++;
   stlet++;
+}
+
+static inline int len_bpe(int pos)
+{
+  return 1+2+len_encode(bpe_rofs[pos],pos);
 }
 
 static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
@@ -368,8 +389,13 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
   res+=len_encode(offset+l+h,used);
   res+=len_encode_l(length-MINLZ+2-2);
 #else
+  //if (length==2) return len_bpe(used);
+// with bpe len is 3 or more
+  //if (offset>=bpe_total[used]) { length--; }
   if (offset>=longlen) { length--; }
+//  length--;
   if (offset>=hugelen) { length--; }
+//  offset+=bpe_total[used];used+=bpe_total[used];
 
   offset--; // 0.. 
 
@@ -570,6 +596,9 @@ int pack(int n) {
 
   if (n==0) { return 0; }
 
+  int bpes=find_bpes(in_buf,n,bpe_ofs,bpe_rofs,bpe_total);
+  printf("find bpe done, found %d bpe matches. bpe would compress to about %d bytes\n",bpes,(int)((n-bpes)*9/8+(bpes/2)*11/8));
+
   init_same(n);
   cache[n-1]=9; /* last letter cannot be packed as a lz */
   cacherle[n-1]=1;
@@ -623,7 +652,8 @@ int pack(int n) {
                 my_use_olz=use_olz[used+1];
                 my_olz_len=olz_len[used+1];
 	      }
-	if (my_best_len>=5)	notskip = 0;
+	if (my_best_len>=5)
+	        notskip = 0;
 //              goto done;
             }
           }
@@ -631,6 +661,23 @@ int pack(int n) {
       }
     }
     
+    if (0&&bpe_ofs[used]>=0) {
+      int tmp=len_bpe(used)+cache[used+2];
+      //printf("bpe tmp=%d res=%d total=%d\n",tmp, res,bpe_total[used]);
+      len=2;
+      pos=bpe_ofs[used];
+      if (tmp<res) {
+          res=tmp;
+          my_best_ofs=pos-used;
+          my_best_len=len;
+          my_use_olz=0;
+          my_olz_len=0;
+      } 
+      if (len<left) {
+        CHECK_OLZ
+      }
+    }
+
     int medium = pos2sorted[used];
     pos=same[used];
     if (pos<0) goto done;
@@ -687,7 +734,7 @@ if (notskip)
           }
 	  max_match=len;
         }
-        if (len<left) {
+        if (len<left && len>=2) {
           CHECK_OLZ
         }
       }
