@@ -72,6 +72,11 @@ static inline int len_encode(int num,int total) {
   register int res=0;
   register int x=1;
 
+//num++;
+//if (num&3!=0) return 10000;
+//num>>=2;
+//total++;
+//total>>=2;
   int top = lzlow(total);
   if (total<=256) return 8;//top=0;
   while (1) {
@@ -939,7 +944,7 @@ int main(int argc,char *argv[]) {
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
     printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
-    e8(n);
+    //e8(n);
     //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
