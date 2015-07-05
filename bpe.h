@@ -35,22 +35,13 @@ void bpe_init() {
   memset(bpe_flags,0,8192);
 }
 
-int bpe_index[256][256];
 void bpe_push(byte *buf, int pos)
 {
   if (pos<2) return;
   byte a=buf[pos-2];
   byte b=buf[pos-1];
   if (has_bpe(a,b)) {
-    //return;
-    int pidx=bpe_index[a][b];
-    int lidx=0;
-    if (bpe_num==BPE) lidx=bpe_head;
-    int s=bpe_last_ofs[lidx];
-    bpe_last_ofs[pidx]=s;
-    bpe_index[buf[s]][buf[s+1]]=pidx;
-    bpe_last_ofs[lidx]=pos-2;
-    //return;
+    return;
   }
   if (bpe_num==BPE) {
     int prev_pos=bpe_last_ofs[bpe_head];
@@ -67,6 +58,7 @@ void bpe_push(byte *buf, int pos)
 
 int find_bpes(byte *buf, int n, int *offsets, int *rofs, int *totals)
 {
+  int bpe_index[256][256];
   int i;
   int cnt=0;
 
@@ -106,6 +98,33 @@ int find_bpes(byte *buf, int n, int *offsets, int *rofs, int *totals)
     }
     offsets[i]=-1;
     rofs[i]=-1;
+  }
+  return cnt;
+}
+
+int cnt_bpes(byte *buf, int n)
+{
+  int bpe_index[256][256];
+  int i;
+  int cnt=0;
+
+  bpe_init();
+  if (buf[1]==buf[0]&&buf[2]==buf[1]) {
+    cnt++;
+  }
+  for(i=2;i<n-1;i++) {
+    int cur_head=bpe_head;
+    bpe_push(buf,i);
+    if (bpe_head!=cur_head)
+      bpe_index[buf[i-2]][buf[i-1]]=cur_head;
+    if (buf[i]==buf[i-1]&&buf[i]==buf[i+1]) {
+      cnt++;
+      continue;
+    }
+    if (has_bpe(buf[i],buf[i+1])) {
+      cnt++;
+      continue;
+    }
   }
   return cnt;
 }

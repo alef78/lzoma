@@ -352,11 +352,11 @@ static inline void put_lz(int offset,int length,int used) {
 #else
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
-static int avg=0;
-avg+=offset;avg>>=1;
-static int avgl=0;
-avgl+=length;avgl>>=1;
-fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
+//static int avg=0;
+//avg+=offset;avg>>=1;
+//static int avgl=0;
+//avgl+=length;avgl>>=1;
+//fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
   //int save1=offset>old_ofs?1:0;
   putenc(offset/*-save1*/,used/*-1*/,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
@@ -893,29 +893,7 @@ int dorle(signed long n)
   return n;
 }
 
-void e8(signed long n) {
-  long i;
-  long *op;
-  for(i=0; i<n-5;) {
-    byte b = in_buf[i];
-    if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
-      i++;
-      b = 0xe8;
-    }
-    b &= 0xFE;
-    i++;  
-    if (b == 0xe8) {
-       op = (long *)(in_buf+i);
-       if (*op >= -i && *op < n-i) {
-         *op += i;
-       } else if ( *op >= n-i && *op < n ) {
-         *op -= n; // to [-i,1] 
-       }
-       i+=4;
-    }
-  }
-}
-
+#include "e8.h"
 int main(int argc,char *argv[]) {
   FILE *ifd,*ofd;
   int n,i,res,bres,blz;
@@ -944,7 +922,18 @@ int main(int argc,char *argv[]) {
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
   while((n=fread(in_buf,1,MAX_SIZE,ifd))>0) {
     printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
-    //e8(n);
+    int b1=cnt_bpes(in_buf,n);
+    int use_e8=1;
+    e8(n);
+    int b2=cnt_bpes(in_buf,n);
+    printf("stats noe8 %d e8 %d\n",b1,b2);
+    if (b2<=b1) {
+      use_e8=0;
+      printf("reverted e8\n");
+
+      e8back(in_buf,n);
+    }
+
     //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
@@ -955,6 +944,7 @@ int main(int argc,char *argv[]) {
     } else {
       fwrite(&bres,4,1,ofd);
       fwrite(&n,4,1,ofd);
+      fwrite(&use_e8,1,1,ofd);
       fwrite(out_best,1,bres,ofd);
 //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
     }

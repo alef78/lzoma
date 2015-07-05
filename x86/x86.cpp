@@ -57,6 +57,7 @@ void fputw( uint c, FILE* file )
   fputc( c    , file );
   fputc( c>> 8, file );
 }
+#define Psh(c) ( c==0x06 || c==0x16 || c==0x1E || (c>0x4F && c<0x58) )
 
 #define wswap(a) ( ((a)>>8) + (((a)&255)<<8) )
 #define bswap(a) ( wswap((a)>>16)+(wswap((a)&65535)<<16) )
@@ -66,8 +67,8 @@ void fputw( uint c, FILE* file )
 #include <map>
 std::map<int,int> cofs;
 std::map<int,int> jofs;
-#define mask 0xfffff800
-#define shift 0x400
+#define mask 0xffffe000
+#define shift 0x1000
 int main(int argc,char* argv[])
 {
 int cn=0;
@@ -87,7 +88,7 @@ int jn=0;
   { 
     if ( p[i]==0xE8 && i<=BytesLoaded-5-3 )  
     {
-      a = i + (uint&)p[i+1];
+      a = i+5 + (uint&)p[i+1];
 
       if ( a<BytesLoaded ) {
         a+=shift;
@@ -99,7 +100,7 @@ int jn=0;
     }
 
     if ( p[i]==0xE9 && i<=BytesLoaded-5-3 ) {
-      a = i + (uint&)p[i+1];
+      a = i+5 + (uint&)p[i+1];
       if ( a<BytesLoaded ) {
         a+=shift;
         a&=mask;
@@ -111,7 +112,7 @@ int jn=0;
     } 
 
     if ( p[i]==0x0F && (p[i+1]&0xF0)==0x80 && i<=BytesLoaded-6 ) {
-      a = i + (uint&)p[i+2];
+      a = i+6 + (uint&)p[i+2];
       if ( a<BytesLoaded ) {
         a+=shift;
         a&=mask;
@@ -130,11 +131,17 @@ int jn=0;
 
     if ( p[i]==0xE8 && i<=BytesLoaded-5-3 )  
     {
-      a = i + (uint&)p[i+1];
+      a = i+5 + (uint&)p[i+1];
 //result becomes in [0..n)
 //initially we are at [-i..n-i)
 //if (a<BytesLoaded+i) {
-      if ( a<BytesLoaded && cofs.count((a+shift)&mask) && cofs[(a+shift)&mask]>1 ) {
+int use=0;
+
+      if ( a<BytesLoaded && cofs.count((a+shift)&mask) && cofs[(a+shift)&mask]>1 ) use=1;
+      if ( a<BytesLoaded && Psh(p[a]) ) use=1;
+      if ( a<BytesLoaded && a>0 && p[a-1]==0xc3 ) use=1;
+
+      if ( use ) {
         putc( 0x00, Flags );
 
           fputd( bswap(a), Calls );
@@ -154,9 +161,13 @@ int jn=0;
     }
 
     if ( p[i]==0xE9 && i<=BytesLoaded-5-3 ) {
-      a = i + (uint&)p[i+1];
+      a = i+5 + (uint&)p[i+1];
 //if (a<BytesLoaded+i) {
-      if ( a<BytesLoaded && jofs.count((a+shift)&mask) && jofs[(a+shift)&mask]>1 ) {
+int use=0;
+
+      if ( a<BytesLoaded && jofs.count((a+shift)&mask) && jofs[(a+shift)&mask]>1 ) use=1;
+      if ( a<BytesLoaded && Psh(p[a]) ) use=1;
+      if ( use ) {
         putc( 0x00, Flags );
         fputd( bswap( a ), Jumps );
         i+=4;
@@ -167,9 +178,13 @@ int jn=0;
     } 
 
     if ( p[i]==0x0F && (p[i+1]&0xF0)==0x80 && i<=BytesLoaded-6 ) {
-      a = i + (uint&)p[i+2];
+      a = i+6 + (uint&)p[i+2];
 //if (a<BytesLoaded+i) {
-      if ( a<BytesLoaded && jofs.count((a+shift)&mask) && jofs[(a+shift)&mask]>1 ) {
+int use=0;
+
+      if ( a<BytesLoaded && jofs.count((a+shift)&mask) && jofs[(a+shift)&mask]>1 ) use=1;
+      if ( a<BytesLoaded && Psh(p[a]) ) use=1;
+      if ( use ) {
         putc( 0x00, Flags );
         fputd( bswap( a ), Jumps );
         i+=4;

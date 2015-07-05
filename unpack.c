@@ -148,30 +148,7 @@ uselastofs:
 }
 
 extern unsigned int unpack(byte *src, byte *dst, int left);
-void e8back(byte *buf,long n) {
-  long i;
-  signed long *op;
-  for(i=0; i<n-5;) {
-	byte b = buf[i];
-    if ((b == 0xF) && (buf[i+1] & 0xF0) == 0x80) {
-      i++;
-      b = 0xe8;
-    }
-    b &= 0xFE;
-    i++;
-
-    if (b == 0xe8) {
-       op = (long *)(buf+i);
-       if (*op >= -i && *op < 0) {
-         *op += n;
-       } else if ( *op >= 0 && *op < n ) {
-         *op -= i;
-       }
-       i+=4;
-    } 
-  }
-}
-
+#include "e8.h"
 int main(int argc,char * argv[]) {
   int ifd,ofd;
   int n,n_unp;
@@ -181,17 +158,18 @@ int main(int argc,char * argv[]) {
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
   while(read(ifd,&n,4)==4) {
     read(ifd,&n_unp,4);
-    //read(ifd,&shift,1);
+    int use_e8=0;
+    read(ifd,&use_e8,1);
     //breaklz=1<<shift;
     //breaklz = 1<<9;
     read(ifd,in_buf,n);
-    for(int t=0;t<10;t++) {
+    //for(int t=0;t<10;t++) {
       long unsigned tsc = (long unsigned)__rdtsc();
       unpack(in_buf, out_buf, n_unp);
       tsc=(long unsigned)__rdtsc()-tsc;
       printf("tsc=%lu\n",tsc);
-    }
-    e8back(out_buf,n_unp);
+    //}
+    if (use_e8) e8back(out_buf,n_unp);
     write(ofd,out_buf,n_unp);
   }
 
