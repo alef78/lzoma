@@ -38,11 +38,14 @@ FILE *fdist=NULL;
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
+byte out_lzpos[MAX_SIZE];// 1 lz looks here
+int out_lzwas[MAX_SIZE]; // to which pos+1 we look, 0 none
+int out_lzcnt[MAX_SIZE]; // counts
 byte out_best[MAX_SIZE];
 
-int bpe_ofs[MAX_SIZE];
-int bpe_rofs[MAX_SIZE];
-int bpe_total[MAX_SIZE];
+//int bpe_ofs[MAX_SIZE];
+//int bpe_rofs[MAX_SIZE];
+//int bpe_total[MAX_SIZE];
 
 int use_olz[MAX_SIZE];
 int olz_len[MAX_SIZE];
@@ -304,6 +307,9 @@ void initout(void) {
   bit_cnt=1;
   old_ofs=0;
   was_letter=1;
+  memset(out_lzpos,0,MAX_SIZE);
+  memset(out_lzwas,0,MAX_SIZE*4);
+  memset(out_lzcnt,0,MAX_SIZE*4);
 }
 
 static inline int min(int a,int b) {
@@ -350,6 +356,8 @@ static inline void put_lz(int offset,int length,int used) {
     putenc_l(length-2,breaklen);
   }
 #else
+out_lzpos[used-offset-1]=1;
+out_lzwas[used]=used-offset-1+1;
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
 //static int avg=0;
@@ -374,10 +382,10 @@ static inline void put_letter(byte b) {
   stlet++;
 }
 
-static inline int len_bpe(int pos)
-{
-  return 1+2+len_encode(bpe_rofs[pos],pos);
-}
+//static inline int len_bpe(int pos)
+//{
+//  return 1+2+len_encode(bpe_rofs[pos],pos);
+//}
 
 static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
@@ -601,8 +609,8 @@ int pack(int n) {
 
   if (n==0) { return 0; }
 
-  int bpes=find_bpes(in_buf,n,bpe_ofs,bpe_rofs,bpe_total);
-  printf("find bpe done, found %d bpe matches. bpe would compress to about %d bytes\n",bpes,(int)((n-bpes)*9/8+(bpes/2)*11/8));
+//  int bpes=find_bpes(in_buf,n,bpe_ofs,bpe_rofs,bpe_total);
+//  printf("find bpe done, found %d bpe matches. bpe would compress to about %d bytes\n",bpes,(int)((n-bpes)*9/8+(bpes/2)*11/8));
 
   init_same(n);
   cache[n-1]=9; /* last letter cannot be packed as a lz */
@@ -665,7 +673,7 @@ int pack(int n) {
         }
       }
     }
-    
+#if 0    
     if (0&&bpe_ofs[used]>=0) {
       int tmp=len_bpe(used)+cache[used+2];
       //printf("bpe tmp=%d res=%d total=%d\n",tmp, res,bpe_total[used]);
@@ -682,7 +690,7 @@ int pack(int n) {
         CHECK_OLZ
       }
     }
-
+#endif
     int medium = pos2sorted[used];
     pos=same[used];
     if (pos<0) goto done;
@@ -861,6 +869,25 @@ dolz:
     }
   }
   printf("out bytes=%d\n",outpos);
+  int cnt=0;
+  FILE *f=fopen("lzpos","wb");
+  for(i=0;i<n;i++) {
+  fprintf(f,"%c",out_lzpos[i]);
+  cnt+=out_lzpos[i];
+  out_lzcnt[i]=cnt;
+  }
+  fclose(f);
+  f=fopen("lzrolz","wb");
+  for(i=0;i<n;i++) {
+  int ofs=out_lzwas[i];
+  if (ofs==0) continue;
+  ofs--;
+  int b1=out_lzcnt[ofs];
+  int b2=out_lzcnt[i];
+  b2-=b1;
+  fwrite(&b2,1,4,f);
+  }
+  fclose(f);
 
   return outpos;
 }
