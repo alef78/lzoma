@@ -923,7 +923,7 @@ int dorle(signed long n)
 #include "e8.h"
 int main(int argc,char *argv[]) {
   FILE *ifd,*ofd;
-  int n,i,res,bres,blz;
+  int n,i,bres,blz;
   byte b;
 
   if (argc<3) {
@@ -964,7 +964,7 @@ int main(int argc,char *argv[]) {
     //n=dorle(n);
     bres=pack(n);
     memcpy(out_best,out_buf,bres);
-    if (res==n) {
+    if (bres==n) {
       fwrite(&n,4,1,ofd);
       fwrite(&n,4,1,ofd);
       fwrite(in_buf,1,n,ofd);
