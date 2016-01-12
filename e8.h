@@ -1,7 +1,8 @@
+#include <stdint.h>
 
-void e8(signed long n) {
-  long i;
-  long *op;
+void e8(int32_t n) {
+  int32_t i;
+  int32_t *op;
   for(i=0; i<n-5;) {
     byte b = in_buf[i];
     if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
@@ -11,7 +12,7 @@ void e8(signed long n) {
     i++;
     b &= 0xFE;
     if (b == 0xe8) {
-       op = (long *)(in_buf+i);
+       op = (int32_t *)(in_buf+i);
        if (*op >= -i && *op < n-i) {
          *op += i;
        } else if ( *op >= n-i && *op < n ) {
@@ -22,9 +23,9 @@ void e8(signed long n) {
   }
 }
 
-void e8back(byte *buf,long n) {
-  long i;
-  signed long *op;
+void e8back(byte *buf,int32_t n) {
+  int32_t i;
+  int32_t *op;
   for(i=0; i<n-5;) {
 	byte b = buf[i];
     if ((b == 0xF) && (buf[i+1] & 0xF0) == 0x80) {
@@ -35,7 +36,7 @@ void e8back(byte *buf,long n) {
     i++;
 
     if (b == 0xe8) {
-       op = (long *)(buf+i);
+       op = (int32_t *)(buf+i);
        if (*op >= -i && *op < 0) {
          *op += n;
        } else if ( *op >= 0 && *op < n ) {
