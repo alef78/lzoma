@@ -85,9 +85,7 @@ static void unpack_c(byte *src, byte *dst, int left) {
   left--;
 
 copyletter:
-//fprintf(stderr,"i");
   *dst++=*src++;
-  //was_letter=1;
   len=-1;
   left--;
 
@@ -98,7 +96,6 @@ get_bit:
 
   /* unpack lz */
   if (len<0) {
-//fprintf(stderr,"\nw");
     len=1;
     loadbit;
     if (!getbit) {
@@ -106,7 +103,6 @@ get_bit:
     }
   }
   len=2;
-//fprintf(stderr,"\nn");
   getcode(bits,src,dst-out_buf);
   ofs++;
   if (ofs>=longlen) len++;
@@ -114,40 +110,19 @@ get_bit:
   ofs=-ofs;
 uselastofs:
   getlen(bits,src);
-//  printf("lz: %d:%d,left=%d\n",ofs,len,left);
   left-=len;
-//    *dst=dst[ofs];
-//    dst++;
-//    --len;//len is at least 2 bytes - byte1 can be copied without checking
-  //memcpy(dst,dst+ofs,len);dst+=len;
+  // Note: on some platforms memcpy may be faster here
   do {
     *dst=dst[ofs];
     dst++;
-    /*if (--len==0) goto get_bit;
-    *dst=dst[ofs];
-    dst++;
-    if (--len==0) goto get_bit;
-    *dst=dst[ofs];
-    dst++;
-    if (--len==0) goto get_bit;
-    *dst=dst[ofs];
-    dst++;*/
   } while(--len);
-  /*if (ofs < -3)
-  while(len>=4) {
-    *(long*)dst=*(long*)(dst+ofs);
-    dst+=4;
-    len-=4;
-  }
-  while(len>0) {
-    *dst=dst[ofs];
-    dst++;
-    len--;
-  };*/
   goto get_bit;
 }
 
-extern unsigned int unpack(byte *src, byte *dst, int left);
+#ifdef ASM_X86
+extern unsigned int unpack_x86(byte *src, byte *dst, int left);
+#endif
+
 #include "e8.h"
 int main(int argc,char * argv[]) {
   int ifd,ofd;
@@ -160,15 +135,15 @@ int main(int argc,char * argv[]) {
     read(ifd,&n_unp,4);
     int use_e8=0;
     read(ifd,&use_e8,1);
-    //breaklz=1<<shift;
-    //breaklz = 1<<9;
     read(ifd,in_buf,n);
-    //for(int t=0;t<10;t++) {
-      long unsigned tsc = (long unsigned)__rdtsc();
-      unpack(in_buf, out_buf, n_unp);
-      tsc=(long unsigned)__rdtsc()-tsc;
-      printf("tsc=%lu\n",tsc);
-    //}
+    long unsigned tsc = (long unsigned)__rdtsc();
+#ifdef ASM_X86
+    unpack_x86(in_buf, out_buf, n_unp);
+#else
+    unpack_c(in_buf, out_buf, n_unp);
+#endif
+    tsc=(long unsigned)__rdtsc()-tsc;
+    printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
     write(ofd,out_buf,n_unp);
   }

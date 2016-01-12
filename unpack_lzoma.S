@@ -1,10 +1,10 @@
-	.file	"unpack.S"
+	.file	"unpack_lzoma.S"
 	.section	.text.unlikely,"ax",@progbits
 	.text
 	.align 16
-	.globl	unpack
-	.type	unpack, @function
-unpack:
+	.globl	unpack_x86
+	.type	unpack_x86, @function
+unpack_x86:
 	pushl	%ebp
 	pushl	%edi
 	pushl	%esi
@@ -158,4 +158,4 @@ unpack:
 	popl	%edi
 	popl	%ebp
 	ret
-	.size	unpack, .-unpack
+	.size	unpack_x86, .-unpack_x86
