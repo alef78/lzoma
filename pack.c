@@ -36,8 +36,8 @@
 
 // faster settings
 #define level 3
-#define short_match_level 20
-#define match_level 150
+#define short_match_level 25
+#define match_level 200
 // "normal" settings
 //#define level 3
 //#define match_level 1000
@@ -83,11 +83,11 @@ int sorted_prev[MAX_SIZE];
 int sorted_next[MAX_SIZE];
 
 static inline int len_encode(int num,int total) {
-  register int res=0;
-  register int x=1;
+  if (total<=256) return 8;//top=0;
+  register int res=8;
+  register int x=256;
 
   int top = lzlow(total);
-  if (total<=256) return 8;//top=0;
   while (1) {
     x+=x;
     if (x>=total+top) break; /* only 1 bit to be outputted left */
@@ -472,7 +472,7 @@ void init_same(int n) {
 
   bb=0;old=0;
 
-  for(i=0;i<65536;i++) {gen_same[i]=-1-longlen; }
+  for(i=0;i<65536;i++) {gen_same[i]=-1; }
   for(i=0;i<n-1;i++) { 
     cache[i]=0;
     bb=in_buf[i]; bb<<=8; bb|=in_buf[i+1];
@@ -527,7 +527,8 @@ static inline int max(int a,int b) {
               my_best_len=len;\
               my_use_olz=k-len;\
               my_olz_len=best_len[used+k];\
-              my_use_olz2=0;\
+              my_use_olz2=use_olz[used+k];\
+	      my_olz_len2=olz_len2[used+k];\
             }\
           }\
           if (olen==0) {\
@@ -663,83 +664,69 @@ int pack(int n) {
       }
     }
 
-    if (n-i>3 && best_ofs[used+3] && -best_ofs[used+3] < longlen && best_ofs[used+3]!=best_ofs[used+2]) {
-      if (in_buf[used]==in_buf[used+best_ofs[used+3]]) {
-      if (in_buf[used+1]==in_buf[used+1+best_ofs[used+3]]) {
-              int tmp=cache[used+3]+len_olz_minus_lz(-best_ofs[used+3],best_len[used+3],used+3)
-                  +9+len_lz(-best_ofs[used+3],2,used);
+    int k;
+    for(k=1;k<4;k++)
+      if (n-i>2+k && best_ofs[used+2+k] && -best_ofs[used+2+k] < longlen && best_ofs[used+2+k]!=best_ofs[used+1+k]) {
+        if (in_buf[used]==in_buf[used+best_ofs[used+2+k]]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+2+k]]) {
+              int tmp=cache[used+2+k]+len_olz_minus_lz(-best_ofs[used+2+k],best_len[used+2+k],used+2+k)
+                  +9*k+len_lz(-best_ofs[used+2+k],2,used);
 	      if (tmp<=res) {
 	        res=tmp;
-                my_best_ofs=best_ofs[used+3];
+                my_best_ofs=best_ofs[used+2+k];
                 my_best_len=2;
-                my_use_olz=1;
-                my_olz_len=best_len[used+3];
-                my_use_olz2=use_olz[used+3];
-                my_olz_len2=olz_len[used+3];
+                my_use_olz=k;
+                my_olz_len=best_len[used+2+k];
+                my_use_olz2=use_olz[used+2+k];
+                my_olz_len2=olz_len[used+2+k];
 	      }
+          }
         }
       }
-    }
 
-    if (n-i>4 && best_ofs[used+4] && -best_ofs[used+4] < longlen && best_ofs[used+4]!=best_ofs[used+3]) {
-      if (in_buf[used]==in_buf[used+best_ofs[used+4]]) {
-      if (in_buf[used+1]==in_buf[used+1+best_ofs[used+4]]) {
-              int tmp=cache[used+4]+len_olz_minus_lz(-best_ofs[used+4],best_len[used+4],used+4)
-                  +18+len_lz(-best_ofs[used+4],2,used);
+    for(k=1;k<4;k++)
+      if (n-i>3+k && best_ofs[used+3+k] && -best_ofs[used+3+k] < hugelen && best_ofs[used+3+k]!=best_ofs[used+2+k]) {
+        if (in_buf[used]==in_buf[used+best_ofs[used+3+k]]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+3+k]]) {
+            if (in_buf[used+2]==in_buf[used+2+best_ofs[used+3+k]]) {
+              int tmp=cache[used+3+k]+len_olz_minus_lz(-best_ofs[used+3+k],best_len[used+3+k],used+3+k)
+                  +9*k+len_lz(-best_ofs[used+3+k],3,used);
 	      if (tmp<=res) {
 	        res=tmp;
-                my_best_ofs=best_ofs[used+4];
-                my_best_len=2;
-                my_use_olz=2;
-                my_olz_len=best_len[used+4];
-                my_use_olz2=use_olz[used+4];
-                my_olz_len2=olz_len[used+4];
-	      }
-        }
-      }
-    }
-
-    if (n-i>4 && best_ofs[used+4] && -best_ofs[used+4] < hugelen && best_ofs[used+4]!=best_ofs[used+3]) {
-      if (in_buf[used]==in_buf[used+best_ofs[used+4]]) {
-      if (in_buf[used+1]==in_buf[used+1+best_ofs[used+4]]) {
-      if (in_buf[used+2]==in_buf[used+2+best_ofs[used+4]]) {
-              int tmp=cache[used+4]+len_olz_minus_lz(-best_ofs[used+4],best_len[used+4],used+4)
-                  +9+len_lz(-best_ofs[used+4],3,used);
-	      if (tmp<=res) {
-	        res=tmp;
-                my_best_ofs=best_ofs[used+4];
+                my_best_ofs=best_ofs[used+3+k];
                 my_best_len=3;
-                my_use_olz=1;
-                my_olz_len=best_len[used+4];
-                my_use_olz2=use_olz[used+4];
-                my_olz_len2=olz_len[used+4];
+                my_use_olz=k;
+                my_olz_len=best_len[used+3+k];
+                my_use_olz2=use_olz[used+3+k];
+                my_olz_len2=olz_len[used+3+k];
 	      }
+            }
+          }
         }
       }
-    }
-    }
 
-    if (n-i>5 && best_ofs[used+5] && best_ofs[used+5]!=best_ofs[used+4]) {
-      if (in_buf[used]==in_buf[used+best_ofs[used+5]]) {
-      if (in_buf[used+1]==in_buf[used+1+best_ofs[used+5]]) {
-      if (in_buf[used+2]==in_buf[used+2+best_ofs[used+5]]) {
-      if (in_buf[used+3]==in_buf[used+3+best_ofs[used+5]]) {
-              int tmp=cache[used+5]+len_olz_minus_lz(-best_ofs[used+5],best_len[used+5],used+5)
-                  +9+len_lz(-best_ofs[used+5],4,used);
-	      if (tmp<=res) {
-	        res=tmp;
-                my_best_ofs=best_ofs[used+5];
-                my_best_len=4;
-                my_use_olz=1;
-                my_olz_len=best_len[used+5];
-                my_use_olz2=use_olz[used+5];
-                my_olz_len2=olz_len[used+5];
-	      }
+    for(k=1;k<4;k++)
+      if (n-i>4+k && best_ofs[used+4+k] && best_ofs[used+4+k]!=best_ofs[used+3+k]) {
+        if (in_buf[used]==in_buf[used+best_ofs[used+4+k]]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+4+k]]) {
+            if (in_buf[used+2]==in_buf[used+2+best_ofs[used+4+k]]) {
+              if (in_buf[used+3]==in_buf[used+3+best_ofs[used+4+k]]) {
+                int tmp=cache[used+4+k]+len_olz_minus_lz(-best_ofs[used+4+k],best_len[used+4+k],used+4+k)
+                  +9*k+len_lz(-best_ofs[used+4+k],4,used);
+	        if (tmp<=res) {
+	          res=tmp;
+                  my_best_ofs=best_ofs[used+4+k];
+                  my_best_len=4;
+                  my_use_olz=k;
+                  my_olz_len=best_len[used+4+k];
+                  my_use_olz2=use_olz[used+4+k];
+                  my_olz_len2=olz_len[used+4+k];
+	        }
+              }
+            }
+          }
         }
       }
-    }
-    }
-    }
 #if 0    
     if (0&&bpe_ofs[used]>=0) {
       int tmp=len_bpe(used)+cache[used+2];
@@ -769,6 +756,9 @@ int pack(int n) {
       //if (used-pos>=longlen) { max_match++;}
       int ll=(used-pos>=longlen)?1:0;
       if (used-pos>=hugelen) ll=2;
+      if (len<left && len>=2+ll) {
+        CHECK_OLZ
+      }
       for(j=MINLZ+ll;j<=len;j++) {
       //for(j=len;j>=max_match;j-=len_encode_l_dec(j-ll)) {
         int tmp2=tmp+len_lz(used-pos,2-MINLZ+j,used);
@@ -783,9 +773,6 @@ int pack(int n) {
       }
       max_match=len;
 
-      if (len<left && len>=2+ll) {
-        CHECK_OLZ
-      }
     }
     if (max_match<MINLZ) max_match=MINLZ;
     match_check_max = short_match_level;
@@ -800,6 +787,9 @@ int pack(int n) {
         } else if (len==slen) {
           len+=cmpstr(used+len,pos+len);
         } 
+        if (len<left && len>=2) {
+          CHECK_OLZ
+        }
         if (len>max_match) {
           int tmp=0;//+len_encode(used-pos-1,used);
           for(j=max_match+1;j<=len;j++) {
@@ -815,9 +805,6 @@ int pack(int n) {
           }
 	  max_match=len;
         } else { match_check_max--; if (match_check_max <= 0) break; }
-        if (len<left && len>=2) {
-          CHECK_OLZ
-        }
         
       }
     if (!notskip) goto done;
@@ -846,8 +833,11 @@ int pack(int n) {
 	bottom=sorted_next[bottom];
       }
 //      if (used-pos<longlen) continue; // we already checked it
-      if (len<=MINLZ+1 && used-pos>=hugelen) continue; // 
       if (len<=MINLZ) goto done;
+      if (len<=MINLZ+1 && used-pos>=hugelen) continue; // 
+      if (len<left) {
+          CHECK_OLZ
+      }
       if (my_min_ofs>used-pos) {
         my_min_ofs=used-pos;//we are checking matches in decreasing order. we need to check next matches only if those are shorter
         int ll=(used-pos>=hugelen)?1:0;
@@ -864,9 +854,6 @@ int pack(int n) {
         }
       }
 
-      if (len<left) {
-          CHECK_OLZ
-      }
     }    
 
 done:
