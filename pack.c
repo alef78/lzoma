@@ -38,10 +38,6 @@ FILE *fdist=NULL;
 
 byte in_buf[MAX_SIZE]; /* text to be encoded */
 byte out_buf[MAX_SIZE];
-byte out_lzpos[MAX_SIZE];// 1 lz looks here
-int out_lzwas[MAX_SIZE]; // to which pos+1 we look, 0 none
-int out_lzcnt[MAX_SIZE]; // counts
-byte out_best[MAX_SIZE];
 
 //int bpe_ofs[MAX_SIZE];
 //int bpe_rofs[MAX_SIZE];
@@ -74,11 +70,6 @@ static inline int len_encode(int num,int total) {
   register int res=0;
   register int x=1;
 
-//num++;
-//if (num&3!=0) return 10000;
-//num>>=2;
-//total++;
-//total>>=2;
   int top = lzlow(total);
   if (total<=256) return 8;//top=0;
   while (1) {
@@ -97,29 +88,20 @@ static inline int len_encode(int num,int total) {
   if (num>=x-total) { res++;}
 doneit: 
   return res;
-//  }
 }
 
 static inline int len_encode_ol(int num) {//num>=2
-if (num<4) return 2;// 00 01
-num-=2;
-#define SKEW 1
+  if (num<4) return 2;// 00 01
+  num-=2;
+  #define SKEW 1
   return SKEW+((31-__builtin_clz(num))<<1);
 }
 
 static inline int len_encode_l(int num) {//num>=2
-//num-=2;
-//if (num<7) return 3;
-//num-=7;
-//#define SKEW 3
-//num+=2;
-//  return SKEW+((31-__builtin_clz(num))<<1);
-
-
-if (num<4) return 2;// 00 01
-num-=2;
-//#define SKEW 1
-//  return SKEW+((31-__builtin_clz(num))<<1);
+  if (num<4) return 2;// 00 01
+  num-=2;
+  //#define SKEW 1
+  //  return SKEW+((31-__builtin_clz(num))<<1);
   if (num<4) return 1+2;// 0 0=2 1=3
   if (num<8) return 1+4; // 10 00=4 01=5 10=6 11=7
   if (num<16) return 1+6; // 110 xxx 8-15
@@ -163,7 +145,6 @@ static inline int len_encode_l_dec(int num) {//num>=2
   return num-524287;
 }
 
-
 int lastpos;
 unsigned int bit_cnt;
 int outpos;
@@ -175,10 +156,8 @@ static inline void putbit(int bit) {
     *(unsigned long*)(out_buf+lastpos)=0;
     outpos+=4;
     bit_cnt=0x80000000;
-//    outpos+=1;
-//    bit_cnt=0x80;
   }
-  if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;//out_buf[lastpos]|=bit_cnt;
+  if (bit) *(unsigned long *)(out_buf+lastpos)|=bit_cnt;
 }
 
 int stlet=0;
@@ -195,18 +174,18 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   int res=0;
   int x=1;
   int obyte=0;
-if (fdist) fwrite(&num,1,4,fdist);
-//  if (total > 256 && break_at >= 256 && !debug)
-obyte=1;
-bits[0]=0;
-bits[1]=0;
-bits[2]=0;
-bits[3]=0;
-bits[4]=0;
-bits[5]=0;
-bits[6]=0;
-bits[7]=0;
-//if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
+  if (fdist) fwrite(&num,1,4,fdist);
+  //  if (total > 256 && break_at >= 256 && !debug)
+  obyte=1;
+  bits[0]=0;
+  bits[1]=0;
+  bits[2]=0;
+  bits[3]=0;
+  bits[4]=0;
+  bits[5]=0;
+  bits[6]=0;
+  bits[7]=0;
+  //if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
 
   int top=lzlow(total);
   //if (total<=256) top=0;
@@ -267,10 +246,10 @@ static inline void putenc_l(int num, int break_at) {
   int res=0;
   int x=1;
   int obyte=0;
-if (flen) fwrite(&num,1,4,flen);
-//fprintf(stderr,"%c",num);
-//fprintf(stderr,"%c",num>>8);
-  
+  if (flen) fwrite(&num,1,4,flen);
+  //fprintf(stderr,"%c",num);
+  //fprintf(stderr,"%c",num>>8);
+
   if (num==0) {bitslen+=2; putbit(0);putbit(0);return;}
   if (num==1) {bitslen+=2; putbit(0);putbit(1);return;}
   putbit(1);num-=2;bitslen++;
@@ -280,7 +259,7 @@ if (flen) fwrite(&num,1,4,flen);
     if (x>=break_at) {
       if (num<(x>>1)) {bits[res++]=0; break;}
       bits[res++]=1;
-      num-=x>>1;        
+      num-=x>>1;
     }
     bits[res++]=2;
   }
@@ -306,9 +285,6 @@ void initout(void) {
   bit_cnt=1;
   old_ofs=0;
   was_letter=1;
-  memset(out_lzpos,0,MAX_SIZE);
-  memset(out_lzwas,0,MAX_SIZE*4);
-  memset(out_lzcnt,0,MAX_SIZE*4);
 }
 
 static inline int min(int a,int b) {
@@ -355,15 +331,13 @@ static inline void put_lz(int offset,int length,int used) {
     putenc_l(length-2,breaklen);
   }
 #else
-out_lzpos[used-offset-1]=1;
-out_lzwas[used]=used-offset-1+1;
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
-//static int avg=0;
-//avg+=offset;avg>>=1;
-//static int avgl=0;
-//avgl+=length;avgl>>=1;
-//fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
+  //static int avg=0;
+  //avg+=offset;avg>>=1;
+  //static int avgl=0;
+  //avgl+=length;avgl>>=1;
+  //fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
   //int save1=offset>old_ofs?1:0;
   putenc(offset/*-save1*/,used/*-1*/,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
@@ -655,18 +629,17 @@ int pack(int n) {
             if ((best_len[used+1]>3)||(best_len[used+1]==3&&-best_ofs[used+1]<hugelen)|| (-best_ofs[used+1]<longlen)) {
               int tmp=cache[used+1]-len_lz(-best_ofs[used+1],best_len[used+1],used+1)
                   +len_lz(-best_ofs[used+1],best_len[used+1]+1,used);
-	      if (tmp<=res) {
-	        res=tmp;
+              if (tmp<=res) {
+                res=tmp;
                 my_best_ofs=best_ofs[used+1];
                 my_best_len=best_len[used+1]+1;
                 my_use_olz=use_olz[used+1];
                 my_olz_len=olz_len[used+1];
                 my_use_olz2=use_olz2[used+1];
                 my_olz_len2=olz_len2[used+1];
-	      }
-	if (my_best_len>=5)
-	        notskip = 0;
-//              goto done;
+              }
+              if (my_best_len>=5)
+                notskip = 0;
             }
           }
         }
@@ -882,55 +855,7 @@ dolz:
     }
   }
   printf("out bytes=%d\n",outpos);
-  int cnt=0;
-  FILE *f=fopen("lzpos","wb");
-  for(i=0;i<n;i++) {
-  fprintf(f,"%c",out_lzpos[i]);
-  cnt+=out_lzpos[i];
-  out_lzcnt[i]=cnt;
-  }
-  fclose(f);
-  f=fopen("lzrolz","wb");
-  for(i=0;i<n;i++) {
-  int ofs=out_lzwas[i];
-  if (ofs==0) continue;
-  ofs--;
-  int b1=out_lzcnt[ofs];
-  int b2=out_lzcnt[i];
-  b2-=b1;
-  fwrite(&b2,1,4,f);
-  }
-  fclose(f);
-
   return outpos;
-}
-
-int dorle(signed long n)
-{
-  long i;
-  byte rlebuf[1000000];
-  byte *rptr=rlebuf;
-  byte *out=out_buf;
-  *out++=in_buf[0];
-  for(i=1;i<n;) {
-  //printf("rle i=%d to %d\n",i,out-out_buf);
-    *out++=in_buf[i];
-    if (in_buf[i] != in_buf[i-1])
-      i++;
-    else {
-      byte b=in_buf[i];
-      byte cnt=0;
-      while(cnt<255&&i<n-1&& b==in_buf[i+1]) {i++;cnt++;}
-      *rptr++=b+cnt;
-      i++;
-    }
-  }
-  memcpy(out,rlebuf,rptr-rlebuf);
-  out+=rptr-rlebuf;
-  n=out-out_buf;
-  printf("after rle n=%d\n",n);
-  memcpy(in_buf,out_buf,n);
-  return n;
 }
 
 #include "e8.h"
@@ -974,9 +899,7 @@ int main(int argc,char *argv[]) {
       e8back(in_buf,n);
     }
 
-    //n=dorle(n);
     bres=pack(n);
-    memcpy(out_best,out_buf,bres);
     if (bres==n) {
       fwrite(&n,4,1,ofd);
       fwrite(&n,4,1,ofd);
@@ -985,8 +908,8 @@ int main(int argc,char *argv[]) {
       fwrite(&bres,4,1,ofd);
       fwrite(&n,4,1,ofd);
       fwrite(&use_e8,1,1,ofd);
-      fwrite(out_best,1,bres,ofd);
-//  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
+      fwrite(out_buf,1,bres,ofd);
+      //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
     }
   }
   printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);
