@@ -1,35 +1,50 @@
 // test file compression based on lzoma algorith
-// (c) 2015 Alexandr Efimov
+// (c) 2015,2016 Alexandr Efimov
 // License: GPL 2.0 or later
+// Uses divsufsort library for faster initialization (thanks to xezz for suggestion), see divsufsort.h for its license details.
+//
+// Discussion thread: http://encode.ru/threads/2280-LZOMA
+//
 // Notes:
 //
 // Pros:
-// Compression ratio is very good (much higher than lzo, ucl, gzip, bzip2, somewhat higher than lzham. Only a bit worse than lzma/xz).
+// Compression ratio is very good (much higher than lzo, ucl, gzip, bzip2).
 // Decompression speed is very high (faster than gzip, much faster than bzip,lzham, lzma,xz)
-// tiny decompressor code (asm version of decomress function less than 400 bytes)
+// tiny decompressor code (asm version of decompress function less than 400 bytes)
 //
 // compressed data format is somewhere between lzo and lzma
 // uses static encoding and byte-aligned literals and byte-aligned parts of match offset for decompression speed
 //
 // Cons:
 // compressor is VERY slow. It is possible to implement faster compressor at the cost of some compression ratio.
-// may be it is possible to adapt lzma compressor code
+// may be it is possible to adapt lzma compressor code.
 //
-// code of both compression/decompression utils is only experimental. no support for streaming, can only compress one file that is fully loaded in memory.
-// compressed data format is nowhere near stable yet.
+// Other:
+// Code of both compression/decompression utils is experimental.
+// compressed data format is not stable yet.
+// compressor source code is more like a ground for experiments, not a finished product yet.
+// some commented out code was intended for experiments with Reduced-offset LZ, RLE step before LZ, LZX-style encoding of matches, various heuristics, etc.
 //
 #include <stdio.h>
 #include <stdlib.h>
-
+#include"divsufsort.h"
 
 #include "lzoma.h"
 #include "bpe.h"
 #define MINOLEN 1
 #define MINLZ 2
+
+// faster settings: about 3x-4x faster, 1% worse compression ratio
+//#define level 1
+//#define match_level 5
+// "normal" settings
 #define level 3
 #define match_level 1000
+// slow settings - typically 3x slower than "normal", but may be 10x slower on some files. tiny gains (0.1% or so) in compression ratio.
 //#define level 5
-//#define match_level 10000000
+//#define match_level 10000
+// note: higher values, especially for match_level, are completely unpractical - will result in extremely slow compression and nearly zero improvments in compression ratio.
+
 FILE *flzlit=NULL;
 FILE *flit=NULL;
 FILE *folz=NULL;
@@ -466,13 +481,14 @@ void init_same(int n) {
   }
   same[i]=-1;
 
-  printf("init_same done.\n");
-
-  for(i=0;i<n;i++) sorted[i]=i;
-
-  qsort( sorted, n, sizeof( int ),
-               ( int (*)(const void *, const void *) ) cmpstrsort );
-  printf("qsort done.\n");
+  if (n > 1000) {
+    for(i=0;i<256+256*256;i++) gen_same[i] =0;	// for bucketA & bucketB
+    divsufsort(in_buf,sorted,gen_same,n);
+  } else {
+    for(i=0;i<n;i++) sorted[i]=i;
+    qsort( sorted, n, sizeof( int ),
+                 ( int (*)(const void *, const void *) ) cmpstrsort );
+  }
 
   for(i=0;i<n;i++) pos2sorted[sorted[i]]=i;
   
@@ -486,7 +502,7 @@ void init_same(int n) {
   sorted_next[n-1]=-1;
   in_buf[n]=0;
   
-  printf("sort done.\n");
+  printf("init done.\n");
 }
 
 static inline int max(int a,int b) {
