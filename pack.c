@@ -35,9 +35,9 @@
 #define MINLZ 2
 
 // faster settings
-#define level 3
-#define short_match_level 25
-#define match_level 200
+int level=3;
+int short_match_level=25;
+int match_level=200;
 // "normal" settings
 //#define level 3
 //#define match_level 1000
@@ -911,17 +911,41 @@ int main(int argc,char *argv[]) {
   byte b;
 
   if (argc<3) {
-    printf("usage: lzoma input output [lzlit lit olz len dist]\n");
-    int i;
-    int total=atoi(argv[1]);//16*1024*1024;
-    for(i=total-10;i<total;i++) {
-      printf("%04d:",i);
-      putenc(i, total,breaklz, 1);
-      printf("\n");
+    printf("usage: lzoma [OPTION] input output [lzlit lit olz len dist]\n\t-1 .. -9 Compression level\n");
+    printf("Notice: this program is at experimental stage of development. Compression format is not stable yet.\n");
+    if (argc>1 && argv[1][0]=='%') { // undocumented debug feature to check correctness of offset encoding, when tuning parameters in lzoma.h
+      int i;
+      int total=atoi(argv[1]+1);//16*1024*1024;
+      for(i=total-10;i<total;i++) {
+        printf("%04d:",i);
+        putenc(i, total,breaklz, 1);
+        printf("\n");
+      }
     }
     exit(0);
   }
   int arg=1;
+  int metalevel = 7;
+  if (argv[arg][0]=='-') {
+    if (argv[arg][1]>='1' && argv[arg][1]<='9')
+      metalevel = argv[arg][1]-'0';
+    arg++;
+  }
+  int levels[9][3]= {
+    {1,1,1},
+    {1,2,2},
+    {2,3,5},
+    {3,5,15},
+    {3,7,30},
+    {3,10,100},
+    {3,20,200},
+    {3,40,500},
+    {3,100,1000}
+  };
+  metalevel--;
+  level=levels[metalevel][0];
+  short_match_level=levels[metalevel][1];
+  match_level=levels[metalevel][2];
   char *inf=argv[arg++];
   char *ouf=argv[arg++];
   ifd=fopen(inf,"rb");
