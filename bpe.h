@@ -1,3 +1,5 @@
+#include <string.h>
+
 byte bpe_flags[8192];
 
 static inline void set_bpe(byte a,byte b)
