@@ -77,12 +77,19 @@ getcode_doneit: \
 getlen_0bit: ;\
 }
 
-static void unpack_c(byte *src, byte *dst, int left) {
+static void unpack_c(int skip, byte *src, byte *dst, int left) {
   int ofs=-1;
   int len;
   uint32_t bits=0x80000000;
   uint32_t resbits;
   left--;
+
+  if (skip) {
+    dst+=skip;
+    left-=skip;
+    len=-1;
+    goto get_bit;
+  }
 
 copyletter:
   *dst++=*src++;
@@ -111,6 +118,7 @@ get_bit:
 uselastofs:
   getlen(bits,src);
   left-=len;
+
   // Note: on some platforms memcpy may be faster here
   do {
     *dst=dst[ofs];
@@ -131,21 +139,28 @@ int main(int argc,char * argv[]) {
 
   ifd=open(argv[1],O_RDONLY|O_BINARY);
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
+  int skip = 0;
   while(read(ifd,&n,4)==4) {
+    if (skip)
+      memcpy((void *)out_buf,(void *)(out_buf+MAX_SIZE/2), MAX_SIZE/2);
     read(ifd,&n_unp,4);
     int use_e8=0;
-    read(ifd,&use_e8,1);
+    if (!skip) 
+      read(ifd,&use_e8,1);
+    else
+      use_e8 = 0;
     read(ifd,in_buf,n);
     long unsigned tsc = (long unsigned)__rdtsc();
 #ifdef ASM_X86
     unpack_x86(in_buf, out_buf, n_unp);
 #else
-    unpack_c(in_buf, out_buf, n_unp);
+    unpack_c(skip, in_buf, out_buf, n_unp+skip);
 #endif
     tsc=(long unsigned)__rdtsc()-tsc;
     printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
-    write(ofd,out_buf,n_unp);
+    write(ofd,out_buf+skip,n_unp);
+    skip = MAX_SIZE / 2;
   }
 
   close(ifd);
