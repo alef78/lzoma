@@ -142,9 +142,9 @@ int main(int argc,char * argv[]) {
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
   int skip = 0;
   while(read(ifd,&n,4)==4) {
-    if (skip)
-      memcpy((void *)out_buf,(void *)(out_buf+MAX_SIZE/2), MAX_SIZE/2);
     read(ifd,&n_unp,4);
+    if (skip) // TODO: fix unpack() to treat out buffer as circular to avoid extra memcpy here
+      memmove((void *)out_buf,(void *)(out_buf+NEXT_SIZE), MAX_SIZE-NEXT_SIZE);
     int use_e8=0;
     if (!skip) 
       read(ifd,&use_e8,1);
@@ -161,7 +161,7 @@ int main(int argc,char * argv[]) {
     printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
     write(ofd,out_buf+skip,n_unp);
-    skip = MAX_SIZE / 2;
+    skip = MAX_SIZE-NEXT_SIZE;
   }
 
   close(ifd);

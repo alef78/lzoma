@@ -1,5 +1,6 @@
 #define byte unsigned char
 #define MAX_SIZE 16*1024*1024
+#define NEXT_SIZE 1*1024*1024
 
 #define longlen 5400
 #define hugelen 0x060000

@@ -852,7 +852,7 @@ done:
     cache[used]=res;
 
     if ((i&0xFFF)==0) {
-      printf("\x0D%d left ",i);
+      printf("\x0D%d left ",i-start);
       fflush(stdout);
     }
   }
@@ -986,11 +986,11 @@ int main(int argc,char *argv[]) {
         //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
       }
     } else { // next blocks
-      memcpy(in_buf, in_buf+MAX_SIZE/2, MAX_SIZE/2);
-      n=fread(in_buf+MAX_SIZE/2,1,MAX_SIZE/2,ifd);
+      memmove(in_buf, in_buf+NEXT_SIZE, MAX_SIZE-NEXT_SIZE);
+      n=fread(in_buf+MAX_SIZE-NEXT_SIZE,1,NEXT_SIZE,ifd);
       if (n<=0) break;
       printf("got %d bytes, packing...\n",n);
-      bres=pack(MAX_SIZE/2,MAX_SIZE/2+n);
+      bres=pack(MAX_SIZE-NEXT_SIZE,MAX_SIZE-NEXT_SIZE+n);
       if (bres==n) {
         fwrite(&n,4,1,ofd);
         fwrite(&n,4,1,ofd);
