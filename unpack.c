@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
-#include <x86intrin.h>
+//#include <x86intrin.h>
 
 #define O_BINARY 0
 #define byte unsigned char
@@ -78,24 +78,23 @@ getcode_doneit: \
 getlen_0bit: ;\
 }
 
-static void unpack_c(int skip, byte *src, byte *dst, int left) {
+static void unpack_c(int history_size, byte *src, byte *dst, byte *start, int left) {
   int ofs=-1;
   int len;
   uint32_t bits=0x80000000;
   uint32_t resbits;
   left--;
 
-  if (skip) {
-    dst+=skip;
-    left-=skip;
-    len=-1;
-    goto get_bit;
+  if (history_size) {
+    history_size-=dst-start;
+    goto nextblock;
   }
 
 copyletter:
   *dst++=*src++;
-  len=-1;
   left--;
+nextblock:
+  len=-1;
 
 get_bit:
   if (left<0) return;
@@ -111,7 +110,7 @@ get_bit:
     }
   }
   len=2;
-  getcode(bits,src,dst-out_buf);
+  getcode(bits,src,dst-start+history_size);
   ofs++;
   if (ofs>=longlen) len++;
   if (ofs>=hugelen) len++;
@@ -121,8 +120,10 @@ uselastofs:
   left-=len;
 
   // Note: on some platforms memcpy may be faster here
+  int ptr = dst-start+ofs;
   do {
-    *dst=dst[ofs];
+    *dst=start[ptr&(MAX_SIZE-1)];
+    ptr++;
     dst++;
   } while(--len);
   goto get_bit;
@@ -140,28 +141,30 @@ int main(int argc,char * argv[]) {
 
   ifd=open(argv[1],O_RDONLY|O_BINARY);
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
-  int skip = 0;
+  int history_size = 0;
+  int ofs = 0;
   while(read(ifd,&n,4)==4) {
     read(ifd,&n_unp,4);
-    if (skip) // TODO: fix unpack() to treat out buffer as circular to avoid extra memcpy here
-      memmove((void *)out_buf,(void *)(out_buf+NEXT_SIZE), MAX_SIZE-NEXT_SIZE);
     int use_e8=0;
-    if (!skip) 
+    if (!history_size) 
       read(ifd,&use_e8,1);
     else
       use_e8 = 0;
     read(ifd,in_buf,n);
-    long unsigned tsc = (long unsigned)__rdtsc();
+    //long unsigned tsc = (long unsigned)__rdtsc();
 #ifdef ASM_X86
+#error Asm version not yet updated for recent format changes. Please use C version right now.
     unpack_x86(in_buf, out_buf, n_unp);
 #else
-    unpack_c(skip, in_buf, out_buf, n_unp+skip);
+    unpack_c(history_size, in_buf, out_buf+ofs, out_buf, n_unp);
 #endif
-    tsc=(long unsigned)__rdtsc()-tsc;
-    printf("tsc=%lu\n",tsc);
+    //tsc=(long unsigned)__rdtsc()-tsc;
+    //printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
-    write(ofd,out_buf+skip,n_unp);
-    skip = MAX_SIZE-NEXT_SIZE;
+    write(ofd,out_buf+ofs,n_unp);
+    ofs+=n_unp;
+    ofs &= (MAX_SIZE-1);
+    history_size = MAX_SIZE-NEXT_SIZE;
   }
 
   close(ifd);
