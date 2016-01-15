@@ -162,6 +162,7 @@ int main(int argc,char * argv[]) {
     //printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
     write(ofd,out_buf+ofs,n_unp);
+    if (use_e8) e8(out_buf,n_unp);
     ofs+=n_unp;
     ofs &= (MAX_SIZE-1);
     history_size = MAX_SIZE-NEXT_SIZE;
