@@ -31,20 +31,23 @@
 
 #include "lzoma.h"
 #include "bpe.h"
+#include "e8.h"
+
 #define MINOLEN 1
 #define MINLZ 2
 
-// faster settings
-int level=3;
-int short_match_level=25;
-int match_level=200;
-// "normal" settings
-//#define level 3
-//#define match_level 1000
-// slow settings - typically 3x slower than "normal", but may be 10x slower on some files. tiny gains (0.1% or so) in compression ratio.
-//#define level 5
-//#define match_level 10000
-// note: higher values, especially for match_level, are completely unpractical - will result in extremely slow compression and nearly zero improvments in compression ratio.
+int level, short_match_level, match_level;
+  int levels[9][3]= {
+    {1,1,2},
+    {1,2,3},
+    {2,3,5},
+    {3,5,15},
+    {3,7,30},
+    {3,10,100},
+    {3,20,200}, // default level -7
+    {3,40,500},
+    {3,100,1000}
+  };
 
 FILE *flzlit=NULL;
 FILE *flit=NULL;
@@ -52,39 +55,52 @@ FILE *folz=NULL;
 FILE *flen=NULL;
 FILE *fdist=NULL;
 
-/* todo: these should become a structure, malloced and given as paramter to functions to aviod global variables */
-int shared_use_olz_and_sorted[MAX_SIZE];
-int shared_olz_len_and_sorted_len[MAX_SIZE+1];
-int shared_use_olz2_and_sorted_prev[MAX_SIZE];
-int shared_olz_len2_and_sorted_next[MAX_SIZE];
-int shared_cache_and_same[MAX_SIZE];
-int shared_best_len_and_samelen[MAX_SIZE];
-int shared_best_ofs_and_gen_same[MAX_SIZE];
-int rle[MAX_SIZE+1];
+uint32_t *rle;
+uint8_t *in_buf; /* text to be encoded */
+//uint8_t *out_buf; - shared with rle
+#define out_buf ((uint8_t *)rle)
 
-byte in_buf[MAX_SIZE]; /* text to be encoded */
-//byte out_buf[MAX_SIZE];
-#define out_buf ((char *)rle)
+typedef struct {
+  int32_t cache; /* best possible result in bits if we start with lz or letter code */
+  int32_t best_ofs; /* best way to start, assuming we do not start with OLD OFFSET code */
+  int32_t best_len; /* best way to start - match len, assuming we do not start with OLD OFFSET code */
+  int32_t use_olz; /* if not zero, repeat same offset after this number of literals */
+  int32_t olz_len; /* length of repeated lz */
+  int32_t use_olz2; /* if not zero, repeat same offset after this number of literals after first repeat */
+  int32_t olz_len2; /* length of repeated lz */
+} FutureState;
 
-#define cache shared_cache_and_same /* best possible result in bits if we start with lz or letter code */
-#define best_ofs shared_best_ofs_and_gen_same /* best way to start, assuming we do not start with OLD OFFSET code */
-#define best_len shared_best_len_and_samelen /* best way to start - match len, assuming we do not start with OLD OFFSET code */
-#define use_olz shared_use_olz_and_sorted /* if not zero, repeat same offset after this number of literals */
-#define olz_len (shared_olz_len_and_sorted_len+1) /* length of repeated lz */
-#define use_olz2 shared_use_olz2_and_sorted_prev /* if not zero, repeat same offset after this number of literals after first repeat */
-#define olz_len2 shared_olz_len2_and_sorted_next /* length of repeated lz */
+typedef struct {
+  int32_t same; /* pointer to previous match of at least 2 bytes. for checking nearby short matches */
+  int32_t samelen; /* length of match between this and previous string pointed by "same" */
 
-#define same shared_cache_and_same /* pointer to previous match of at least 2 bytes. for checking nearby short matches */
-#define samelen shared_best_len_and_samelen /* length of match between this and previous string pointed by "same" */
-#define gen_same shared_best_ofs_and_gen_same /* temp buffer used during initialiazation only */
+  // sorted tree in order to quickly check long matches starting from the longest match
+  int32_t sorted_len;
+  int32_t sorted_prev;
+  int32_t sorted_next;
+} PastState;
 
-// sorted tree in order to quickly check long matches starting from the longest match
-#define sorted shared_use_olz_and_sorted
-#define sorted_len (shared_olz_len_and_sorted_len+1)
-#define sorted_prev shared_use_olz2_and_sorted_prev
-#define sorted_next shared_olz_len2_and_sorted_next
+// PastState and FutureState share the same memory buffer
+// sizeof(PastState) should be < sizeof(FutureState)
+void *state;
 
-static inline int len_encode(int num,int total) {
+#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*MAX_SIZE)) // used very early in initialization
+
+#define cache(i) ((FutureState *)state)[i].cache
+#define best_ofs(i) ((FutureState *)state)[i].best_ofs
+#define best_len(i) ((FutureState *)state)[i].best_len
+#define use_olz(i) ((FutureState *)state)[i].use_olz
+#define olz_len(i) ((FutureState *)state)[i].olz_len
+#define use_olz2(i) ((FutureState *)state)[i].use_olz2
+#define olz_len2(i) ((FutureState *)state)[i].olz_len2
+
+#define same(i) (((PastState *)state)[i].same)
+#define samelen(i) (((PastState *)state)[i].samelen)
+#define sorted_len(i) (((PastState *)state)[i].sorted_len)
+#define sorted_prev(i) (((PastState *)state)[i].sorted_prev)
+#define sorted_next(i) (((PastState *)state)[i].sorted_next)
+
+static inline int price_offset(int num,int total) {
   if (total<=256) return 8;//top=0;
   register int res=8;
   register int x=256;
@@ -108,59 +124,18 @@ doneit:
   return res;
 }
 
-static inline int len_encode_ol(int num) {//num>=2
+static inline int price_replen(int num) {//num>=2
   if (num<4) return 2;// 00 01
   num-=2;
-  #define SKEW 1
-  return SKEW+((31-__builtin_clz(num))<<1);
+  #define REPLEN_SKEW 1
+  return REPLEN_SKEW+((31-__builtin_clz(num))<<1);
 }
 
-static inline int len_encode_l(int num) {//num>=2
-  if (num<4) return 2;// 00 01
+static inline int price_len(int num) {//num>=2
+  if (num<4) return 2;// 00 01 10 
   num-=2;
-  //#define SKEW 1
-  //  return SKEW+((31-__builtin_clz(num))<<1);
-  if (num<4) return 1+2;// 0 0=2 1=3
-  if (num<8) return 1+4; // 10 00=4 01=5 10=6 11=7
-  if (num<16) return 1+6; // 110 xxx 8-15
-  if (num<32) return 1+8;
-  if (num<64) return 1+10;
-  if (num<128) return 1+12;
-  if (num<256) return 1+14;
-  if (num<512) return 1+16;
-  if (num<1024) return 1+18;
-  if (num<2048) return 1+20;
-  if (num<4096) return 1+22;
-  if (num<8192) return 1+24;
-  if (num<16384) return 1+26;
-  if (num<32768) return 1+28;
-  if (num<65536) return 1+30;
-  if (num<131072) return 1+32;
-  if (num<262144) return 1+34;
-  if (num<524288) return 1+36;
-  return 1+38;
-}
-
-static inline int len_encode_l_dec(int num) {//num>=2
-  if (num<4) return num;// 0 0=2 1=3
-  if (num<8) return num-3; // 10 00=4 01=5 10=6 11=7
-  if (num<16) return num-7; // 110 xxx 8-15
-  if (num<32) return num-15;
-  if (num<64) return num-31;
-  if (num<128) return num-63;
-  if (num<256) return num-127;
-  if (num<512) return num-255;
-  if (num<1024) return num-511;
-  if (num<2048) return num-1023;
-  if (num<4096) return num-2047;
-  if (num<8192) return num-4095;
-  if (num<16384) return num-8191;
-  if (num<32768) return num-16383;
-  if (num<65536) return num-32767;
-  if (num<131072) return num-65535;
-  if (num<262144) return num-131071;
-  if (num<524288) return num-262143;
-  return num-524287;
+  #define LEN_SKEW 1
+  return LEN_SKEW+((31-__builtin_clz(num))<<1);
 }
 
 int lastpos;
@@ -265,8 +240,6 @@ static inline void putenc_l(int num, int break_at) {
   int x=1;
   int obyte=0;
   if (flen) fwrite(&num,1,4,flen);
-  //fprintf(stderr,"%c",num);
-  //fprintf(stderr,"%c",num>>8);
 
   if (num==0) {bitslen+=2; putbit(0);putbit(0);return;}
   if (num==1) {bitslen+=2; putbit(0);putbit(1);return;}
@@ -316,24 +289,17 @@ static inline void put_lz(int offset,int length,int used) {
   putbit(1); bitslzlen++;
   offset=-offset; /* 1.. */
   offset--; /* 0.. */
-//fprintf(stderr,was_letter?"\nw":"n");
-//printf("was %d old %d\n",was_letter, old_ofs==offset? 1 : 0);
   if (was_letter) { bitsolzlen++;
     was_letter=0;
     if (old_ofs==offset) {
-//fprintf(stderr,"o%d\n",length);
     stolz++;
     if (folz) fprintf(folz,"%c",0);
       putbit(0);
-      //putenc_l(0,breaklen);
-      //length^=1;
       putenc_l(length-MINOLEN,breaklen);
       return;
     }
     if (folz) fprintf(folz,"%c",1);
-    //putenc_l(0,breaklen);
     putbit(1);
-    //length++;
   }
   length-=MINLZ;
   stlz++;
@@ -353,13 +319,7 @@ static inline void put_lz(int offset,int length,int used) {
 #else
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
-  //static int avg=0;
-  //avg+=offset;avg>>=1;
-  //static int avgl=0;
-  //avgl+=length;avgl>>=1;
-  //fprintf(stderr,"%d\t%d\t%d\t%d\t%d\t%d\t%d\n",offset,length,used,avg,avgl,len_encode(offset,used),len_encode_l(length+2));
-  //int save1=offset>old_ofs?1:0;
-  putenc(offset/*-save1*/,used/*-1*/,breaklz, 0);
+  putenc(offset,used,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
 #endif
 
@@ -375,12 +335,7 @@ static inline void put_letter(byte b) {
   stlet++;
 }
 
-//static inline int len_bpe(int pos)
-//{
-//  return 1+2+len_encode(bpe_rofs[pos],pos);
-//}
-
-static inline int len_lz(int offset, int length, int used) { // offset>=1, length>=2, 
+static inline int price_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
   int res=1; /* 1 bit = not a letter */
 #if LZX
@@ -389,43 +344,33 @@ static inline int len_lz(int offset, int length, int used) { // offset>=1, lengt
   used+=l+h;
   offset--;
   if (length==2)
-    return res+len_encode(offset,used);
+    return res+price_offset(offset,used);
   if (length==3)
-    return res+len_encode(offset+l,used);
-  res+=len_encode(offset+l+h,used);
-  res+=len_encode_l(length-MINLZ+2-2);
+    return res+price_offset(offset+l,used);
+  res+=price_offset(offset+l+h,used);
+  res+=price_len(length-MINLZ+2-2);
 #else
-  //if (length==2) return len_bpe(used);
-// with bpe len is 3 or more
-  //if (offset>=bpe_total[used]) { length--; }
   if (offset>=longlen) { length--; }
-//  length--;
   if (offset>=hugelen) { length--; }
-//  offset+=bpe_total[used];used+=bpe_total[used];
 
   offset--; // 0.. 
 
-  res+=len_encode(offset,used);
-  res+=len_encode_l(length-MINLZ+2);
+  res+=price_offset(offset,used);
+  res+=price_len(length-MINLZ+2);
 #endif
   return res;
 }
 
-static inline int len_olz_minus_lz(int offset, int length, int used) { // offset>=1, length>=2, 
+static inline int price_replz_minus_lz(int offset, int length, int used) { // offset>=1, length>=2, 
                                                     // if offset=>0xD00  length>=3
-  int res=2;//because olz
-  //int ll=(offset>=longlen) ? 1:0;
-  //if (offset>=hugelen) ll=2;
-   { res+=len_encode_ol(length+2-MINOLEN); }
-  //offset--; /* 0.. */
-  return res-len_lz(offset,length,used);
+  int res=2 /* lzlit flag, replz flag */ +price_replen(length+2-MINOLEN);
+  return res-price_lz(offset,length,used);
 }
 
 static inline int cmpstr(int src,int src2) {
   int res=0;
   int b;
-  
-//  printf("%d:%d:%d\n",src,src2,left);
+
   for(;;) {
     if (in_buf[src]!=in_buf[src2]) return res;
     b=rle[src2];
@@ -457,34 +402,21 @@ int cmpstrsort(int *psrc,int *psrc2) {
 
 void init_same(int start, int n) {
   int i;
-  unsigned short int bb;
-  int old;
+  uint16_t bb;
+  int run_len;
+  int gen_same[256*256+256];
 
-  old = 1;
-  rle[n-1]=old;
+  rle[n] = run_len = 0;
   byte b = in_buf[n-1];
-  for(i=n-2;i>=0;i--) {
+  for(i=n-1;i>=0;i--) {
     if (in_buf[i]==b) 
-      {/*if (old<255)*/ old++;}
+      run_len++;
     else {
       b=in_buf[i];
-      old = 1;
+      run_len = 1;
     }
-    rle[i]=old;
+    rle[i]=run_len;
   }
-  rle[n]=0;
-
-  bb=0;old=0;
-
-  for(i=0;i<65536;i++) {gen_same[i]=-1; }
-  for(i=0;i<n-1;i++) { 
-    cache[i]=0;
-    bb=in_buf[i]; bb<<=8; bb|=in_buf[i+1];
-    same[i]=gen_same[bb]; 
-    if (gen_same[bb]>=0) { samelen[i]=1+cmpstr(i+1,same[i]+1);}
-    gen_same[bb]=i; 
-  }
-  same[i]=-1;
 
   if (n > 1000) {
     for(i=0;i<256+256*256;i++) gen_same[i] =0;	// for bucketA & bucketB
@@ -495,15 +427,25 @@ void init_same(int start, int n) {
                  ( int (*)(const void *, const void *) ) cmpstrsort );
   }
 
-  for(i=0;i<n-1;i++) sorted_len[sorted[i]]=cmpstr(sorted[i],sorted[i+1]);
-  sorted_len[sorted[n-1]]=0;
-  sorted_len[-1] = 0;
+  bb=0;
 
-  sorted_prev[sorted[0]]=-1;
-  for(i=1;i<n;i++) sorted_prev[sorted[i]]=sorted_len[sorted[i-1]] > MINLZ? sorted[i-1]:-1;
+  for(i=0;i<65536;i++) {gen_same[i]=-1; }
+  for(i=0;i<n-1;i++) { 
+    bb=in_buf[i]; bb<<=8; bb|=in_buf[i+1];
+    same(i)=gen_same[bb]; 
+    if (gen_same[bb]>=0) { samelen(i)=1+cmpstr(i+1,same(i)+1);}
+    gen_same[bb]=i; 
+  }
+  same(i)=-1;
 
-  for(i=0;i<n-1;i++) sorted_next[sorted[i]]=sorted_len[sorted[i]] > MINLZ? sorted[i+1]:-1;
-  sorted_next[sorted[n-1]]=-1;
+  for(i=0;i<n-1;i++) sorted_len(sorted[i])=cmpstr(sorted[i],sorted[i+1]);
+  sorted_len(sorted[n-1])=0;
+
+  sorted_prev(sorted[0])=-1;
+  for(i=1;i<n;i++) sorted_prev(sorted[i])=sorted_len(sorted[i-1]) > MINLZ? sorted[i-1]:-1;
+
+  for(i=0;i<n-1;i++) sorted_next(sorted[i])=sorted_len(sorted[i]) > MINLZ? sorted[i+1]:-1;
+  sorted_next(sorted[n-1])=-1;
   in_buf[n]=0;
   
   printf("init done.\n");
@@ -513,32 +455,32 @@ static inline int max(int a,int b) {
   return a>b? a:b;
 }
 
-#define CHECK_OLZ \
+#define CHECK_REPLZ \
         int k;\
 	int jjj;\
         int d=level;\
-        int tmp=len_lz(used-pos,len,used);\
+        int tmp=price_lz(used-pos,len,used);\
         int olen=0;\
         for(k=len+1;k<left-2;k++) {\
           tmp+=9;\
-          if (best_ofs[used+k]==pos-used) {\
-            int tmp2=tmp+len_olz_minus_lz(used-pos,best_len[used+k],used+k);\
-            tmp2+=cache[used+k];\
+          if (best_ofs(used+k)==pos-used) {\
+            int tmp2=tmp+price_replz_minus_lz(used-pos,best_len(used+k),used+k);\
+            tmp2+=cache(used+k);\
             if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {\
               res=tmp2;\
               my_best_ofs=pos-used;\
               my_best_len=len;\
               my_use_olz=k-len;\
-              my_olz_len=best_len[used+k];\
-              my_use_olz2=use_olz[used+k];\
-	      my_olz_len2=olz_len2[used+k];\
+              my_olz_len=best_len(used+k);\
+              my_use_olz2=use_olz(used+k);\
+	      my_olz_len2=olz_len2(used+k);\
             }\
           }\
           if (olen==0) {\
             olen=cmpstr(used+k,pos+k);\
             for (j=MINOLEN;j<olen;j++) {\
-              int tmp2=tmp+1+1+len_encode_ol(j+2-MINOLEN);\
-              tmp2+=cache[used+k+j];\
+              int tmp2=tmp+1+1+price_replen(j+2-MINOLEN);\
+              tmp2+=cache(used+k+j);\
               if (tmp2<res || (tmp2==res && my_best_ofs<pos-used)) {\
                 res=tmp2;\
                 my_best_ofs=pos-used;\
@@ -549,23 +491,23 @@ static inline int max(int a,int b) {
               }\
             }\
 	    if (olen>=MINOLEN) {\
-              int tmp2=tmp+2+len_encode_ol(olen+2-MINOLEN);\
-              tmp2+=cache[used+k+olen];\
-              if (best_len[used+k+olen]==1) {\
+              int tmp2=tmp+2+price_replen(olen+2-MINOLEN);\
+              tmp2+=cache(used+k+olen);\
+              if (best_len(used+k+olen)==1) {\
 	        int jj;\
 	        for(jj=1;jj<=8;jj++) {\
-                  if (best_len[used+k+olen+jj]>1) {\
-                    if (best_ofs[used+k+olen+jj]==pos-used) {\
-                      tmp2+=len_olz_minus_lz(used-pos,best_len[used+k+olen+jj],used+k+olen+jj);\
+                  if (best_len(used+k+olen+jj)>1) {\
+                    if (best_ofs(used+k+olen+jj)==pos-used) {\
+                      tmp2+=price_replz_minus_lz(used-pos,best_len(used+k+olen+jj),used+k+olen+jj);\
 		      break;\
                     }\
 	          }\
                       int olen2=cmpstr(used+k+olen+jj,pos+k+olen+jj);\
             for (jjj=MINOLEN;jjj<=olen2;jjj++) {\
 		     /* if (olen2>=MINOLEN) {*/\
-		        int tmp3=-cache[used+k+olen];\
-			tmp3+=jj*9+2+len_encode_ol(jjj+2-MINOLEN);\
-			tmp3+=cache[used+k+olen+jj+jjj];\
+		        int tmp3=-cache(used+k+olen);\
+			tmp3+=jj*9+2+price_replen(jjj+2-MINOLEN);\
+			tmp3+=cache(used+k+olen+jj+jjj);\
 			if (tmp3<0) { tmp3+=tmp2;\
               if (tmp3<res || (tmp3==res && my_best_ofs<pos-used)) {\
                 res=tmp3;\
@@ -591,7 +533,7 @@ static inline int max(int a,int b) {
               }\
 	    }\
           } else olen--;\
-          if (best_ofs[used+k]) {\
+          if (best_ofs(used+k)) {\
             d--; if (d==0) break;\
           }\
         }
@@ -604,18 +546,18 @@ int pack(int start, int n) {
   if (n<start) { return 0; }
 
   init_same(start,n);
-  cache[n-1]=9; /* last letter cannot be packed as a lz */
-  best_ofs[n-1]=0;
-  best_len[n-1]=1;
-  use_olz[n-1]=0;
-  use_olz[n-1]=0;
+  cache(n-1)=9; /* last letter cannot be packed as a lz */
+  best_ofs(n-1)=0;
+  best_len(n-1)=1;
+  use_olz(n-1)=0;
+  use_olz(n-1)=0;
 
-  if (sorted_prev[n-1]>=0) {
-    sorted_len[sorted_prev[n-1]] = min(sorted_len[sorted_prev[n-1]],
-                                            sorted_len[n-1]);
-    sorted_next[sorted_prev[n-1]]=sorted_next[n-1];
+  if (sorted_prev(n-1)>=0) {
+    sorted_len(sorted_prev(n-1)) = min(sorted_len(sorted_prev(n-1)),
+                                            sorted_len(n-1));
+    sorted_next(sorted_prev(n-1))=sorted_next(n-1);
   }
-  if (sorted_next[n-1]>=0) sorted_prev[sorted_next[n-1]]=sorted_prev[n-1];
+  if (sorted_next(n-1)>=0) sorted_prev(sorted_next(n-1))=sorted_prev(n-1);
 
   for(i=n-2;i>=start;i--) {
     int used=i;
@@ -635,26 +577,23 @@ int pack(int start, int n) {
     int match_check_max;
     int notskip = 1; 
 
-    res=9+cache[used+1];
-    if (best_ofs[used+1]) {
-      //int ll=-best_ofs[used+1] < longlen ? 0:1;
-      //res+=len_encode_l(best_len[used+1]-ll+1)-len_encode_l(best_len[used+1]-ll);
+    res=9+cache(used+1);
+    if (best_ofs(used+1)) {
       res++;
-      //res++;
       if (in_buf[used]==in_buf[used+1]) {
         if (in_buf[used]==in_buf[used-1]) {
-          if (in_buf[used]==in_buf[used+best_ofs[used+1]]) {
-            if ((best_len[used+1]>3)||(best_len[used+1]==3&&-best_ofs[used+1]<hugelen)|| (-best_ofs[used+1]<longlen)) {
-              int tmp=cache[used+1]-len_lz(-best_ofs[used+1],best_len[used+1],used+1)
-                  +len_lz(-best_ofs[used+1],best_len[used+1]+1,used);
+          if (in_buf[used]==in_buf[used+best_ofs(used+1)]) {
+            if ((best_len(used+1)>3)||(best_len(used+1)==3&&-best_ofs(used+1)<hugelen)|| (-best_ofs(used+1)<longlen)) {
+              int tmp=cache(used+1)-price_lz(-best_ofs(used+1),best_len(used+1),used+1)
+                  +price_lz(-best_ofs(used+1),best_len(used+1)+1,used);
               if (tmp<=res) {
                 res=tmp;
-                my_best_ofs=best_ofs[used+1];
-                my_best_len=best_len[used+1]+1;
-                my_use_olz=use_olz[used+1];
-                my_olz_len=olz_len[used+1];
-                my_use_olz2=use_olz2[used+1];
-                my_olz_len2=olz_len2[used+1];
+                my_best_ofs=best_ofs(used+1);
+                my_best_len=best_len(used+1)+1;
+                my_use_olz=use_olz(used+1);
+                my_olz_len=olz_len(used+1);
+                my_use_olz2=use_olz2(used+1);
+                my_olz_len2=olz_len2(used+1);
               }
               if (my_best_len>=5)
                 notskip = 0;
@@ -666,39 +605,39 @@ int pack(int start, int n) {
 
     int k;
     for(k=1;k<4;k++)
-      if (n-i>2+k && best_ofs[used+2+k] && -best_ofs[used+2+k] < longlen && best_ofs[used+2+k]!=best_ofs[used+1+k]) {
-        if (in_buf[used]==in_buf[used+best_ofs[used+2+k]]) {
-          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+2+k]]) {
-              int tmp=cache[used+2+k]+len_olz_minus_lz(-best_ofs[used+2+k],best_len[used+2+k],used+2+k)
-                  +9*k+len_lz(-best_ofs[used+2+k],2,used);
+      if (n-i>2+k && best_ofs(used+2+k) && -best_ofs(used+2+k) < longlen && best_ofs(used+2+k)!=best_ofs(used+1+k)) {
+        if (in_buf[used]==in_buf[used+best_ofs(used+2+k)]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs(used+2+k)]) {
+              int tmp=cache(used+2+k)+price_replz_minus_lz(-best_ofs(used+2+k),best_len(used+2+k),used+2+k)
+                  +9*k+price_lz(-best_ofs(used+2+k),2,used);
 	      if (tmp<=res) {
 	        res=tmp;
-                my_best_ofs=best_ofs[used+2+k];
+                my_best_ofs=best_ofs(used+2+k);
                 my_best_len=2;
                 my_use_olz=k;
-                my_olz_len=best_len[used+2+k];
-                my_use_olz2=use_olz[used+2+k];
-                my_olz_len2=olz_len[used+2+k];
+                my_olz_len=best_len(used+2+k);
+                my_use_olz2=use_olz(used+2+k);
+                my_olz_len2=olz_len(used+2+k);
 	      }
           }
         }
       }
 
     for(k=1;k<4;k++)
-      if (n-i>3+k && best_ofs[used+3+k] && -best_ofs[used+3+k] < hugelen && best_ofs[used+3+k]!=best_ofs[used+2+k]) {
-        if (in_buf[used]==in_buf[used+best_ofs[used+3+k]]) {
-          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+3+k]]) {
-            if (in_buf[used+2]==in_buf[used+2+best_ofs[used+3+k]]) {
-              int tmp=cache[used+3+k]+len_olz_minus_lz(-best_ofs[used+3+k],best_len[used+3+k],used+3+k)
-                  +9*k+len_lz(-best_ofs[used+3+k],3,used);
+      if (n-i>3+k && best_ofs(used+3+k) && -best_ofs(used+3+k) < hugelen && best_ofs(used+3+k)!=best_ofs(used+2+k)) {
+        if (in_buf[used]==in_buf[used+best_ofs(used+3+k)]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs(used+3+k)]) {
+            if (in_buf[used+2]==in_buf[used+2+best_ofs(used+3+k)]) {
+              int tmp=cache(used+3+k)+price_replz_minus_lz(-best_ofs(used+3+k),best_len(used+3+k),used+3+k)
+                  +9*k+price_lz(-best_ofs(used+3+k),3,used);
 	      if (tmp<=res) {
 	        res=tmp;
-                my_best_ofs=best_ofs[used+3+k];
+                my_best_ofs=best_ofs(used+3+k);
                 my_best_len=3;
                 my_use_olz=k;
-                my_olz_len=best_len[used+3+k];
-                my_use_olz2=use_olz[used+3+k];
-                my_olz_len2=olz_len[used+3+k];
+                my_olz_len=best_len(used+3+k);
+                my_use_olz2=use_olz(used+3+k);
+                my_olz_len2=olz_len(used+3+k);
 	      }
             }
           }
@@ -706,41 +645,40 @@ int pack(int start, int n) {
       }
 
     for(k=1;k<4;k++)
-      if (n-i>4+k && best_ofs[used+4+k] && best_ofs[used+4+k]!=best_ofs[used+3+k]) {
-        if (in_buf[used]==in_buf[used+best_ofs[used+4+k]]) {
-          if (in_buf[used+1]==in_buf[used+1+best_ofs[used+4+k]]) {
-            if (in_buf[used+2]==in_buf[used+2+best_ofs[used+4+k]]) {
-              if (in_buf[used+3]==in_buf[used+3+best_ofs[used+4+k]]) {
-                int tmp=cache[used+4+k]+len_olz_minus_lz(-best_ofs[used+4+k],best_len[used+4+k],used+4+k)
-                  +9*k+len_lz(-best_ofs[used+4+k],4,used);
+      if (n-i>4+k && best_ofs(used+4+k) && best_ofs(used+4+k)!=best_ofs(used+3+k)) {
+        if (in_buf[used]==in_buf[used+best_ofs(used+4+k)]) {
+          if (in_buf[used+1]==in_buf[used+1+best_ofs(used+4+k)]) {
+            if (in_buf[used+2]==in_buf[used+2+best_ofs(used+4+k)]) {
+              if (in_buf[used+3]==in_buf[used+3+best_ofs(used+4+k)]) {
+                int tmp=cache(used+4+k)+price_replz_minus_lz(-best_ofs(used+4+k),best_len(used+4+k),used+4+k)
+                  +9*k+price_lz(-best_ofs(used+4+k),4,used);
 	        if (tmp<=res) {
 	          res=tmp;
-                  my_best_ofs=best_ofs[used+4+k];
+                  my_best_ofs=best_ofs(used+4+k);
                   my_best_len=4;
                   my_use_olz=k;
-                  my_olz_len=best_len[used+4+k];
-                  my_use_olz2=use_olz[used+4+k];
-                  my_olz_len2=olz_len[used+4+k];
+                  my_olz_len=best_len(used+4+k);
+                  my_use_olz2=use_olz(used+4+k);
+                  my_olz_len2=olz_len(used+4+k);
 	        }
               }
             }
           }
         }
       }
-    pos=same[used];
+    pos=same(used);
     if (pos<0) goto done;
 
     if (notskip) {
-      len=samelen[used];
+      len=samelen(used);
       int ll=(used-pos>=longlen)?1:0;
       if (used-pos>=hugelen) ll=2;
       if (len<left && len>=2+ll) {
-        CHECK_OLZ
+        CHECK_REPLZ
       }
       for(j=MINLZ+ll;j<=len;j++) {
-      //for(j=len;j>=max_match;j-=len_encode_l_dec(j-ll)) {
-        int tmp=len_lz(used-pos,2-MINLZ+j,used);
-        tmp+=cache[used+j];
+        int tmp=price_lz(used-pos,2-MINLZ+j,used);
+        tmp+=cache(used+j);
         if (tmp<res) {
           res=tmp;
           my_best_ofs=pos-used;
@@ -756,8 +694,8 @@ int pack(int start, int n) {
     match_check_max = short_match_level;
     if (notskip) 
       for(;;) {
-        int slen=samelen[pos];
-        pos=same[pos];
+        int slen=samelen(pos);
+        pos=same(pos);
         if (used-pos>=longlen) break;
         if (pos<0) break;
         if (len>slen) {
@@ -766,12 +704,12 @@ int pack(int start, int n) {
           len+=cmpstr(used+len,pos+len);
         } 
         if (len<left && len>=2) {
-          CHECK_OLZ
+          CHECK_REPLZ
         }
         if (len>max_match) {
           for(j=max_match+1;j<=len;j++) {
-            int tmp=len_lz(used-pos,j-MINLZ+2,used);
-            tmp+=cache[used+j];
+            int tmp=price_lz(used-pos,j-MINLZ+2,used);
+            tmp+=cache(used+j);
             if (tmp<res) {
               res=tmp;
               my_best_ofs=pos-used;
@@ -788,10 +726,10 @@ int pack(int start, int n) {
     
     max_match=my_best_len+1;//2;
     if (max_match<MINLZ) max_match=MINLZ;
-    int top=sorted_prev[used];
-    int bottom=sorted_next[used];
-    int len_top=sorted_len[top];
-    int len_bottom=sorted_len[used];
+    int top=sorted_prev(used);
+    int bottom=sorted_next(used);
+    int len_top=top >= 0 ? sorted_len(top) : 0;
+    int len_bottom=bottom >= 0 ? sorted_len(used) : 0;
 
     match_check_max = match_level;
     int my_min_ofs=used+1;
@@ -801,26 +739,26 @@ int pack(int start, int n) {
       if (len_top>len_bottom) {
         pos=top;
 	len=len_top;
-	top=sorted_prev[pos];
-        len_top = min(len_top,sorted_len[top]);
+	top=sorted_prev(pos);
+        len_top = min(len_top,top >= 0 ? sorted_len(top):0);
       } else {
         pos=bottom;
 	len=len_bottom;
-        len_bottom = min(len_bottom,sorted_len[bottom]);
-	bottom=sorted_next[pos];
+        len_bottom = min(len_bottom,bottom >= 0 ? sorted_len(bottom):0);
+	bottom=sorted_next(pos);
       }
 //      if (used-pos<longlen) continue; // we already checked it
       if (len<=MINLZ) goto done;
       if (len<=MINLZ+1 && used-pos>=hugelen) continue; // 
       if (len<left) {
-          CHECK_OLZ
+          CHECK_REPLZ
       }
       if (my_min_ofs>used-pos) {
         my_min_ofs=used-pos;//we are checking matches in decreasing order. we need to check next matches only if those are shorter
         int ll=(used-pos>=hugelen)?1:0;
         for(j=MINLZ+1+ll;j<=len;j++) {
-          int tmp=len_lz(used-pos,j-MINLZ+2,used);
-          tmp+=cache[used+j];
+          int tmp=price_lz(used-pos,j-MINLZ+2,used);
+          tmp+=cache(used+j);
           if (tmp<res || (tmp==res && my_best_ofs<pos-used)) {
             res=tmp;
             my_best_ofs=pos-used;
@@ -834,22 +772,22 @@ int pack(int start, int n) {
     }    
 
 done:
-    if (sorted_prev[used]>=0) {
-      sorted_len[sorted_prev[used]] = min(sorted_len[sorted_prev[used]],
-                                            sorted_len[used]);
-      sorted_next[sorted_prev[used]]=sorted_next[used];
+    if (sorted_prev(used)>=0) {
+      sorted_len(sorted_prev(used)) = min(sorted_len(sorted_prev(used)),
+                                            sorted_len(used));
+      sorted_next(sorted_prev(used))=sorted_next(used);
     }
-    if (sorted_next[used]>=0) {
-      sorted_prev[sorted_next[used]]=sorted_prev[used];
+    if (sorted_next(used)>=0) {
+      sorted_prev(sorted_next(used))=sorted_prev(used);
     }
 
-    best_ofs[used]=my_best_ofs;
-    best_len[used]=my_best_len;
-    use_olz[used]=my_use_olz;
-    olz_len[used]=my_olz_len;
-    use_olz2[used]=my_use_olz2;
-    olz_len2[used]=my_olz_len2;
-    cache[used]=res;
+    best_ofs(used)=my_best_ofs;
+    best_len(used)=my_best_len;
+    use_olz(used)=my_use_olz;
+    olz_len(used)=my_olz_len;
+    use_olz2(used)=my_use_olz2;
+    olz_len2(used)=my_olz_len2;
+    cache(used)=res;
 
     if ((i&0xFFF)==0) {
       printf("\x0D%d left ",i-start);
@@ -857,7 +795,7 @@ done:
     }
   }
 
-  res=8+cache[start];
+  res=8+cache(start);
   printf("\nres=%d\n",res);
   res+=7;
   res>>=3;
@@ -869,28 +807,28 @@ done:
   /* now we can easily generate compressed stream */
   initout(start);
   for(i=start;i<n;) {
-    if (best_len[i]==1) {
+    if (best_len(i)==1) {
       put_letter(in_buf[i]); i++;
     } else {
       int k,ofs,len,k2,len2;
 dolz:
 //      printf("do_lz %d:%d,left=%d\n",best_ofs[i],best_len[i],n-i);
-      put_lz(best_ofs[i],best_len[i],i);
-      ofs=best_ofs[i];
-      len=olz_len[i];
-      len2=olz_len2[i];
-      k=use_olz[i];
-      k2=use_olz2[i];
-      i+=best_len[i];
+      put_lz(best_ofs(i),best_len(i),i);
+      ofs=best_ofs(i);
+      len=olz_len(i);
+      len2=olz_len2(i);
+      k=use_olz(i);
+      k2=use_olz2(i);
+      i+=best_len(i);
       if (k>0) {
         for(;k>0;k--) put_letter(in_buf[i++]);
-        if ((use_olz[i])&&(len==best_len[i])&&(ofs==best_ofs[i])) goto dolz;
+        if ((use_olz(i))&&(len==best_len(i))&&(ofs==best_ofs(i))) goto dolz;
 //        printf("put_lz %d:%d,left=%d\n",ofs,len,n-i);
         put_lz(ofs,len,i);
         i+=len;
       if (k2>0) {
         for(;k2>0;k2--) put_letter(in_buf[i++]);
-        if ((use_olz[i])&&(len2==best_len[i])&&(ofs==best_ofs[i])) goto dolz;
+        if ((use_olz(i))&&(len2==best_len(i))&&(ofs==best_ofs(i))) goto dolz;
 //        printf("put_lz %d:%d,left=%d\n",ofs,len,n-i);
         put_lz(ofs,len2,i);
         i+=len2;
@@ -904,7 +842,6 @@ dolz:
   return outpos;
 }
 
-#include "e8.h"
 int main(int argc,char *argv[]) {
   FILE *ifd,*ofd;
   int n,i,bres,blz;
@@ -924,6 +861,9 @@ int main(int argc,char *argv[]) {
     }
     exit(0);
   }
+  in_buf = (void *)malloc(MAX_SIZE * sizeof(uint8_t));
+  rle = (void *)malloc(MAX_SIZE * sizeof(uint32_t));
+  state = (void *)malloc(MAX_SIZE * sizeof(FutureState));
   int arg=1;
   int metalevel = 7;
   if (argv[arg][0]=='-') {
@@ -931,17 +871,6 @@ int main(int argc,char *argv[]) {
       metalevel = argv[arg][1]-'0';
     arg++;
   }
-  int levels[9][3]= {
-    {1,1,1},
-    {1,2,2},
-    {2,3,5},
-    {3,5,15},
-    {3,7,30},
-    {3,10,100},
-    {3,20,200},
-    {3,40,500},
-    {3,100,1000}
-  };
   metalevel--;
   level=levels[metalevel][0];
   short_match_level=levels[metalevel][1];
@@ -963,7 +892,7 @@ int main(int argc,char *argv[]) {
       printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
       int b1=cnt_bpes(in_buf,n);
       int use_e8=1;
-      e8(n);
+      e8(in_buf, n);
       int b2=cnt_bpes(in_buf,n);
       printf("stats noe8 %d e8 %d\n",b1,b2);
       if (b2<=b1) {

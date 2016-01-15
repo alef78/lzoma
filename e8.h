@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-void e8(int32_t n) {
+void e8(byte *in_buf, int32_t n) {
   int32_t i;
   int32_t *op;
   for(i=0; i<n-5;) {
