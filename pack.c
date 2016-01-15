@@ -168,7 +168,6 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   int x=1;
   int obyte=0;
   if (fdist) fwrite(&num,1,4,fdist);
-  //  if (total > 256 && break_at >= 256 && !debug)
   obyte=1;
   bits[0]=0;
   bits[1]=0;
@@ -178,7 +177,7 @@ static inline void putenc(int num,int total, int break_at, int debug) {
   bits[5]=0;
   bits[6]=0;
   bits[7]=0;
-  //if (!debug)  fprintf(stderr,"ofs=%d total=%d\n",num,total);
+  //if (debug) fprintf(stderr,"ofs=%d total=%d\n",num,total);
 
   int top=lzlow(total);
   //if (total<=256) top=0;
@@ -213,23 +212,23 @@ doneit:
     }
   }
   if (obyte) {
-  //printf("res=%d\n", res);
-  byte b=0;
-  for(x=0;x<8;x++) {
-    if (debug) printf("%d",bits[x]);
-    if (bits[x]) b|=128>>x;
-  }
-  if (debug) printf(" ");
-  out_buf[outpos++]=b;
-  for(;x<res;x++) {
-    if (debug) printf("%d",bits[x]);
-    putbit(bits[x]);
-  }
+    //printf("res=%d\n", res);
+    byte b=0;
+    for(x=0;x<8;x++) {
+      if (debug) printf("%d",bits[x]);
+      if (bits[x]) b|=128>>x;
+    }
+    if (debug) printf(" ");
+    if (!debug) out_buf[outpos++]=b;
+    for(;x<res;x++) {
+      if (debug) printf("%d",bits[x]);
+      if (!debug) putbit(bits[x]);
+    }
   }
   else 
-  for(x=0;x<res;x++) {
-    if (debug) printf("%d",bits[x]);
-    putbit(bits[x]);
+    for(x=0;x<res;x++) {
+      if (debug) printf("%d",bits[x]);
+      putbit(bits[x]);
   }
   bitsdist+=res;
 }
@@ -853,6 +852,7 @@ int main(int argc,char *argv[]) {
     if (argc>1 && argv[1][0]=='%') { // undocumented debug feature to check correctness of offset encoding, when tuning parameters in lzoma.h
       int i;
       int total=atoi(argv[1]+1);//16*1024*1024;
+      printf("%d\n",total);
       for(i=total-10;i<total;i++) {
         printf("%04d:",i);
         putenc(i, total,breaklz, 1);
