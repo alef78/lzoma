@@ -9,7 +9,14 @@
 #include <string.h>
 //#include <x86intrin.h>
 
-#define O_BINARY 0
+#ifndef O_BINARY
+  #ifdef _O_BINARY
+    #define O_BINARY _O_BINARY
+  #else
+    #define O_BINARY 0
+  #endif
+#endif
+
 #define byte unsigned char
 #include "lzoma.h"
 
@@ -143,9 +150,10 @@ int main(int argc,char * argv[]) {
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);
   int history_size = 0;
   int ofs = 0;
+  int use_e8=0;
   while(read(ifd,&n,4)==4) {
+    if (use_e8) e8(out_buf,n_unp);
     read(ifd,&n_unp,4);
-    int use_e8=0;
     if (!history_size) 
       read(ifd,&use_e8,1);
     else
@@ -162,7 +170,6 @@ int main(int argc,char * argv[]) {
     //printf("tsc=%lu\n",tsc);
     if (use_e8) e8back(out_buf,n_unp);
     write(ofd,out_buf+ofs,n_unp);
-    if (use_e8) e8(out_buf,n_unp);
     ofs+=n_unp;
     ofs &= (MAX_SIZE-1);
     history_size = MAX_SIZE-NEXT_SIZE;
