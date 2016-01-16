@@ -154,22 +154,27 @@ int main(int argc,char * argv[]) {
   while(read(ifd,&n,4)==4) {
     if (use_e8) e8(out_buf,n_unp);
     read(ifd,&n_unp,4);
-    if (!history_size) 
+    if (n != n_unp && !history_size) 
       read(ifd,&use_e8,1);
     else
       use_e8 = 0;
-    read(ifd,in_buf,n);
     //long unsigned tsc = (long unsigned)__rdtsc();
+    if (n == n_unp) {
+      read(ifd,out_buf,n_unp);
+      write(ofd,out_buf+ofs,n_unp);
+    } else {
+      read(ifd,in_buf,n);
 #ifdef ASM_X86
 #error Asm version not yet updated for recent format changes. Please use C version right now.
-    unpack_x86(in_buf, out_buf, n_unp);
+      unpack_x86(in_buf, out_buf, n_unp);
 #else
-    unpack_c(history_size, in_buf, out_buf+ofs, out_buf, n_unp);
+      unpack_c(history_size, in_buf, out_buf+ofs, out_buf, n_unp);
 #endif
-    //tsc=(long unsigned)__rdtsc()-tsc;
-    //printf("tsc=%lu\n",tsc);
-    if (use_e8) e8back(out_buf,n_unp);
-    write(ofd,out_buf+ofs,n_unp);
+      //tsc=(long unsigned)__rdtsc()-tsc;
+      //printf("tsc=%lu\n",tsc);
+      if (use_e8) e8back(out_buf,n_unp);
+      write(ofd,out_buf+ofs,n_unp);
+    }
     ofs+=n_unp;
     ofs &= (MAX_SIZE-1);
     history_size = MAX_SIZE-NEXT_SIZE;
