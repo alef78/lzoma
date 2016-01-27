@@ -698,18 +698,20 @@ int pack(int start, int n) {
       for(;;) {
         int slen=samelen(pos);
         pos=same(pos);
-        if (used-pos>=longlen) break;
+        int ll=(used-pos>=longlen)?1:0;
+        if (used-pos>=hugelen) ll=2;
+        //if (used-pos>=longlen) break;
         if (pos<0) break;
         if (len>slen) {
           len=slen;
         } else if (len==slen) {
           len+=cmpstr(used+len,pos+len);
         } 
-        if (len<left && len>=2) {
+        if (len<left && len>=2+ll) {
           CHECK_REPLZ
         }
         if (len>max_match) {
-          for(j=max_match+1;j<=len;j++) {
+          for(j=max_match+1+ll;j<=len;j++) {
             int tmp=price_lz(used-pos,j-MINLZ+2,used);
             tmp+=cache(used+j);
             if (tmp<res) {
