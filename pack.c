@@ -85,8 +85,7 @@ typedef struct {
 void *state;
 void *past_state;
 
-//#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*HISTORY_SIZE)) // used very early in initialization
-int32_t *sorted;
+#define sorted ((int32_t *)((uint8_t *)state)) // used very early in initialization
 
 #define cache(i) ((FutureState *)state)[i-in_offset].cache
 #define best_ofs(i) ((FutureState *)state)[i-in_offset].best_ofs
@@ -867,8 +866,8 @@ int main(int argc,char *argv[]) {
   }
   in_buf = (void *)malloc(HISTORY_SIZE * sizeof(uint8_t));
   rle = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
-  sorted = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
-  state = (void *)malloc(BLOCK_SIZE * sizeof(FutureState));
+  //sorted = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
+  state = (void *)malloc(max(BLOCK_SIZE * sizeof(FutureState), HISTORY_SIZE * sizeof(uint32_t)));
   past_state = (void *)malloc(HISTORY_SIZE * sizeof(PastState));
   int arg=1;
   int metalevel = 7;
