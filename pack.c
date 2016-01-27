@@ -892,12 +892,21 @@ int main(int argc,char *argv[]) {
   if (arg<argc) flen=fopen(argv[arg++],"wb");
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
 
-  n=0;
-  for(;;) {
-    if (n==0) {
-      n=fread(in_buf,1,BLOCK_SIZE,ifd);
-      if (n<=0) break;
-      printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
+  int blocknum;
+  uint32_t blk;
+  for(blocknum=0;;blocknum++) {
+    if (in_offset>HISTORY_SIZE-BLOCK_SIZE) {
+      memmove(in_buf, in_buf+BLOCK_SIZE, HISTORY_SIZE-BLOCK_SIZE);
+      in_offset -= BLOCK_SIZE;
+    }
+    n=fread(in_buf+in_offset,1,BLOCK_SIZE,ifd);
+    if (n<=0) {
+      blk = BLOCK_STORED | BLOCK_LAST;
+      fwrite(&blk,4,1,ofd);
+      break;
+    }
+    printf("got %d bytes, packing...\n",n);
+    if (blocknum==0) {
       /*
       int b1=cnt_bpes(in_buf,n);
       int use_e8=1;
@@ -931,37 +940,25 @@ int main(int argc,char *argv[]) {
       fwrite(header,8,1,ofd);
 
       bres=pack(1,n);
-      if (bres==n) {
-        fwrite(&n,4,1,ofd);
-        fwrite(&n,4,1,ofd);
-        fwrite(in_buf,1,n,ofd);
-      } else {
-        fwrite(&bres,4,1,ofd);
-        fwrite(&n,4,1,ofd);
-        //fwrite(&use_e8,1,1,ofd);
-        fwrite(out_buf,1,bres,ofd);
-        //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
-      }
     } else { // next blocks
-      if (in_offset>HISTORY_SIZE-BLOCK_SIZE) {
-        memmove(in_buf, in_buf+BLOCK_SIZE, HISTORY_SIZE-BLOCK_SIZE);
-        in_offset -= BLOCK_SIZE;
-      }
-      n=fread(in_buf+in_offset,1,BLOCK_SIZE,ifd);
-      if (n<=0) break;
-      printf("got %d bytes, packing...\n",n);
       bres=pack(in_offset,in_offset+n);
-      if (bres==n) {
-        fwrite(&n,4,1,ofd);
-        fwrite(&n,4,1,ofd);
-        fwrite(in_buf+in_offset,1,n,ofd);
-      } else {
-        fwrite(&bres,4,1,ofd);
-        fwrite(&n,4,1,ofd);
-        fwrite(out_buf,1,bres,ofd);
-        //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
-      }
     }
+    uint32_t blk = (n < BLOCK_SIZE) ? BLOCK_LAST : 0;
+    if (bres==n) {
+      blk |= BLOCK_STORED;
+      blk |= n;
+      fwrite(&blk,4,1,ofd);
+      fwrite(in_buf+in_offset,1,n,ofd);
+    } else {
+      blk |= bres;
+      fwrite(&blk,4,1,ofd);
+      if (blk & BLOCK_LAST)
+        fwrite(&n,4,1,ofd);
+      fwrite(out_buf,1,bres,ofd);
+      if (blk & BLOCK_LAST)
+        break;
+    }
+    
     in_offset += n;
   }
   printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);

@@ -2,6 +2,9 @@
 #define AlgoID "LZOM"
 #define Version 0x00
 
+#define BLOCK_STORED 0x80000000
+#define BLOCK_LAST 0x40000000
+
 // TODO: these should become variables
 #define HISTORY_SIZE 16*1024*1024
 #define BLOCK_SIZE (HISTORY_SIZE >> 4)

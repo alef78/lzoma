@@ -168,9 +168,17 @@ int main(int argc,char * argv[]) {
   in_buf = (uint8_t *)malloc(block_size);
   out_buf = (uint8_t *)malloc(history_size); // history is 16*block_size
 
-  while(read(ifd,&n,4)==4) {
+  uint32_t blk;
+  while(read(ifd,&blk,4)==4) {
     //if (use_e8) e8(out_buf,n_unp);
-    read(ifd,&n_unp,4);
+    n = blk & (block_size-1);
+    if (blk & BLOCK_STORED) {
+      n_unp = n;
+    } else if (blk & BLOCK_LAST) {
+      read(ifd,&n_unp,4);
+    } else {
+      n_unp = block_size;
+    }
     /*
     if (n != n_unp && !current_history) 
       read(ifd,&use_e8,1);
@@ -194,6 +202,8 @@ int main(int argc,char * argv[]) {
       //if (use_e8) e8back(out_buf,n_unp);
       write(ofd,out_buf+ofs,n_unp);
     }
+    if (blk & BLOCK_LAST)
+      break;
     ofs+=n_unp;
     ofs &= (history_size-1);
     current_history += n_unp;
