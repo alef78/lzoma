@@ -8,8 +8,8 @@
 // Notes:
 //
 // Pros:
-// Compression ratio is very good (much higher than lzo, ucl, gzip, bzip2).
-// Decompression speed is very high (faster than gzip, much faster than bzip,lzham, lzma,xz)
+// Compression ratio is very good (much higher than lzo, ucl, gzip).
+// Decompression speed is very high (faster than gzip, much faster than bzip2,lzham, lzma,xz)
 // tiny decompressor code (asm version of decompress function less than 400 bytes)
 //
 // compressed data format is somewhere between lzo and lzma
@@ -84,7 +84,7 @@ typedef struct {
 // sizeof(PastState) should be < sizeof(FutureState)
 void *state;
 
-#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*MAX_SIZE)) // used very early in initialization
+#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*HISTORY_SIZE)) // used very early in initialization
 
 #define cache(i) ((FutureState *)state)[i].cache
 #define best_ofs(i) ((FutureState *)state)[i].best_ofs
@@ -861,9 +861,9 @@ int main(int argc,char *argv[]) {
     }
     exit(0);
   }
-  in_buf = (void *)malloc(MAX_SIZE * sizeof(uint8_t));
-  rle = (void *)malloc(MAX_SIZE * sizeof(uint32_t));
-  state = (void *)malloc(MAX_SIZE * sizeof(FutureState));
+  in_buf = (void *)malloc(HISTORY_SIZE * sizeof(uint8_t));
+  rle = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
+  state = (void *)malloc(HISTORY_SIZE * sizeof(FutureState));
   int arg=1;
   int metalevel = 7;
   if (argv[arg][0]=='-') {
@@ -884,12 +884,15 @@ int main(int argc,char *argv[]) {
   if (arg<argc) folz=fopen(argv[arg++],"wb");
   if (arg<argc) flen=fopen(argv[arg++],"wb");
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
+
   n=0;
+  int in_offset = 0;
   for(;;) {
     if (n==0) {
-      n=fread(in_buf,1,MAX_SIZE,ifd);
+      n=fread(in_buf,1,BLOCK_SIZE,ifd);
       if (n<=0) break;
       printf("got %d bytes, packing %s into %s...\n",n,inf,ouf);
+      /*
       int b1=cnt_bpes(in_buf,n);
       int use_e8=1;
       e8(in_buf, n);
@@ -901,6 +904,25 @@ int main(int argc,char *argv[]) {
 
         e8back(in_buf,n);
       }
+      */
+      /* 
+         write compressed file header 
+         we do it here only after we read some data
+         TODO:
+           at this stage we should decide if we will use any file-level compression filters
+      */
+      uint8_t header[8];
+      header[0] = AuthorID >> 8;
+      header[1] = AuthorID & 0xFF;
+      header[2] = AlgoID[0];
+      header[3] = AlgoID[1];
+      header[4] = AlgoID[2];
+      header[5] = AlgoID[3];
+      header[6] = Version;
+      int flags=0;
+      int blocksize_id = 5;
+      header[7] = flags << 4 | blocksize_id; 
+      fwrite(header,8,1,ofd);
 
       bres=pack(1,n);
       if (bres==n) {
@@ -910,20 +932,23 @@ int main(int argc,char *argv[]) {
       } else {
         fwrite(&bres,4,1,ofd);
         fwrite(&n,4,1,ofd);
-        fwrite(&use_e8,1,1,ofd);
+        //fwrite(&use_e8,1,1,ofd);
         fwrite(out_buf,1,bres,ofd);
         //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
       }
     } else { // next blocks
-      memmove(in_buf, in_buf+NEXT_SIZE, MAX_SIZE-NEXT_SIZE);
-      n=fread(in_buf+MAX_SIZE-NEXT_SIZE,1,NEXT_SIZE,ifd);
+      if (in_offset>HISTORY_SIZE-BLOCK_SIZE) {
+        memmove(in_buf, in_buf+BLOCK_SIZE, HISTORY_SIZE-BLOCK_SIZE);
+        in_offset -= BLOCK_SIZE;
+      }
+      n=fread(in_buf+in_offset,1,BLOCK_SIZE,ifd);
       if (n<=0) break;
       printf("got %d bytes, packing...\n",n);
-      bres=pack(MAX_SIZE-NEXT_SIZE,MAX_SIZE-NEXT_SIZE+n);
+      bres=pack(in_offset,in_offset+n);
       if (bres==n) {
         fwrite(&n,4,1,ofd);
         fwrite(&n,4,1,ofd);
-        fwrite(in_buf,1,n,ofd);
+        fwrite(in_buf+in_offset,1,n,ofd);
       } else {
         fwrite(&bres,4,1,ofd);
         fwrite(&n,4,1,ofd);
@@ -931,6 +956,7 @@ int main(int argc,char *argv[]) {
         //  for (i=0;i<n-1;i++) {printf("%d%s\n",cache[i],(cache[i]>=cache[i+1])?"":" !!!");};
       }
     }
+    in_offset += n;
   }
   printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);
   printf("bits lzlit=%d let=%d olz=%d match=%d len=%d\n",bitslzlen,bitslit,bitsolzlen,bitsdist,bitslen);

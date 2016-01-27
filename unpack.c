@@ -20,8 +20,8 @@
 #define byte unsigned char
 #include "lzoma.h"
 
-byte in_buf[MAX_SIZE]; /* text to be encoded */
-byte out_buf[MAX_SIZE];
+byte in_buf[HISTORY_SIZE]; /* text to be encoded */
+byte out_buf[HISTORY_SIZE];
 
 //#define getbit (((bits=bits&0x7f? bits+bits :  (((unsigned)(*src++))<<1)+1)>>8)&1)
 #define getbit ((bits=bits&0x7fffffff? (resbits=bits,bits+bits) :  (src+=4,resbits=*((uint32_t *)(src-4)),(resbits<<1)+1)),resbits>>31)
@@ -129,7 +129,7 @@ uselastofs:
   // Note: on some platforms memcpy may be faster here
   int ptr = dst-start+ofs;
   do {
-    *dst=start[ptr&(MAX_SIZE-1)];
+    *dst=start[ptr&(HISTORY_SIZE-1)];
     ptr++;
     dst++;
   } while(--len);
@@ -151,13 +151,19 @@ int main(int argc,char * argv[]) {
   int history_size = 0;
   int ofs = 0;
   int use_e8=0;
+  uint8_t header[8];
+  read(ifd,header,8);
+  // TODO: validate header here
+  
   while(read(ifd,&n,4)==4) {
-    if (use_e8) e8(out_buf,n_unp);
+    //if (use_e8) e8(out_buf,n_unp);
     read(ifd,&n_unp,4);
+    /*
     if (n != n_unp && !history_size) 
       read(ifd,&use_e8,1);
     else
       use_e8 = 0;
+    */
     //long unsigned tsc = (long unsigned)__rdtsc();
     if (n == n_unp) {
       read(ifd,out_buf,n_unp);
@@ -172,12 +178,14 @@ int main(int argc,char * argv[]) {
 #endif
       //tsc=(long unsigned)__rdtsc()-tsc;
       //printf("tsc=%lu\n",tsc);
-      if (use_e8) e8back(out_buf,n_unp);
+      //if (use_e8) e8back(out_buf,n_unp);
       write(ofd,out_buf+ofs,n_unp);
     }
     ofs+=n_unp;
-    ofs &= (MAX_SIZE-1);
-    history_size = MAX_SIZE-NEXT_SIZE;
+    ofs &= (HISTORY_SIZE-1);
+    history_size += n_unp;
+    if (history_size > HISTORY_SIZE-BLOCK_SIZE)
+      history_size = HISTORY_SIZE-BLOCK_SIZE;
   }
 
   close(ifd);
