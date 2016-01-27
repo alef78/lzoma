@@ -1,10 +1,10 @@
 #include <stdint.h>
 
-void e8(byte *in_buf, int32_t n) {
+void e8(uint8_t *in_buf, int32_t n) {
   int32_t i;
   int32_t *op;
   for(i=0; i<n-5;) {
-    byte b = in_buf[i];
+    uint8_t b = in_buf[i];
     if ((b == 0xF) && (in_buf[i+1] & 0xF0) == 0x80) {
       i++;
       b = 0xe8;
@@ -23,11 +23,11 @@ void e8(byte *in_buf, int32_t n) {
   }
 }
 
-void e8back(byte *buf,int32_t n) {
+void e8back(uint8_t *buf,int32_t n) {
   int32_t i;
   int32_t *op;
   for(i=0; i<n-5;) {
-	byte b = buf[i];
+	uint8_t b = buf[i];
     if ((b == 0xF) && (buf[i+1] & 0xF0) == 0x80) {
       i++;
       b = 0xe8;

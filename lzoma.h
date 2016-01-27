@@ -2,9 +2,6 @@
 #define AlgoID "LZOM"
 #define Version 0x00
 
-// TODO: get rid of this, use uint8_t
-#define byte unsigned char
-
 // TODO: these should become variables
 #define HISTORY_SIZE 16*1024*1024
 #define BLOCK_SIZE (HISTORY_SIZE >> 4)

@@ -1,8 +1,9 @@
 #include <string.h>
+#include <stdint.h>
 
-byte bpe_flags[8192];
+uint8_t bpe_flags[8192];
 
-static inline void set_bpe(byte a,byte b)
+static inline void set_bpe(uint8_t a,uint8_t b)
 {
   int ab=a;
   ab<<=5;
@@ -10,7 +11,7 @@ static inline void set_bpe(byte a,byte b)
   bpe_flags[ab]|=(1<<(b&7));
 }
 
-static inline void unset_bpe(byte a,byte b)
+static inline void unset_bpe(uint8_t a,uint8_t b)
 {
   int ab=a;
   ab<<=5;
@@ -18,7 +19,7 @@ static inline void unset_bpe(byte a,byte b)
   bpe_flags[ab]&=~(1<<(b&7));
 }
 
-static inline int has_bpe(byte a,byte b)
+static inline int has_bpe(uint8_t a,uint8_t b)
 {
   int ab=a;
   ab<<=5;
@@ -37,18 +38,18 @@ void bpe_init() {
   memset(bpe_flags,0,8192);
 }
 
-void bpe_push(byte *buf, int pos)
+void bpe_push(uint8_t *buf, int pos)
 {
   if (pos<2) return;
-  byte a=buf[pos-2];
-  byte b=buf[pos-1];
+  uint8_t a=buf[pos-2];
+  uint8_t b=buf[pos-1];
   if (has_bpe(a,b)) {
     return;
   }
   if (bpe_num==BPE) {
     int prev_pos=bpe_last_ofs[bpe_head];
-    byte pa=buf[prev_pos];
-    byte pb=buf[prev_pos+1];
+    uint8_t pa=buf[prev_pos];
+    uint8_t pb=buf[prev_pos+1];
     unset_bpe(pa,pb);
   }
   bpe_last_ofs[bpe_head++]=pos-2;
@@ -58,7 +59,7 @@ void bpe_push(byte *buf, int pos)
   set_bpe(a,b);
 }
 
-int find_bpes(byte *buf, int n, int *offsets, int *rofs, int *totals)
+int find_bpes(uint8_t *buf, int n, int *offsets, int *rofs, int *totals)
 {
   int bpe_index[256][256];
   int i;
@@ -104,7 +105,7 @@ int find_bpes(byte *buf, int n, int *offsets, int *rofs, int *totals)
   return cnt;
 }
 
-int cnt_bpes(byte *buf, int n)
+int cnt_bpes(uint8_t *buf, int n)
 {
   int bpe_index[256][256];
   int i;

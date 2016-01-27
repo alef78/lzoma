@@ -83,22 +83,26 @@ typedef struct {
 // PastState and FutureState share the same memory buffer
 // sizeof(PastState) should be < sizeof(FutureState)
 void *state;
+void *past_state;
 
-#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*HISTORY_SIZE)) // used very early in initialization
+//#define sorted ((int32_t *)((uint8_t *)state+sizeof(PastState)*HISTORY_SIZE)) // used very early in initialization
+int32_t *sorted;
 
-#define cache(i) ((FutureState *)state)[i].cache
-#define best_ofs(i) ((FutureState *)state)[i].best_ofs
-#define best_len(i) ((FutureState *)state)[i].best_len
-#define use_olz(i) ((FutureState *)state)[i].use_olz
-#define olz_len(i) ((FutureState *)state)[i].olz_len
-#define use_olz2(i) ((FutureState *)state)[i].use_olz2
-#define olz_len2(i) ((FutureState *)state)[i].olz_len2
+#define cache(i) ((FutureState *)state)[i-in_offset].cache
+#define best_ofs(i) ((FutureState *)state)[i-in_offset].best_ofs
+#define best_len(i) ((FutureState *)state)[i-in_offset].best_len
+#define use_olz(i) ((FutureState *)state)[i-in_offset].use_olz
+#define olz_len(i) ((FutureState *)state)[i-in_offset].olz_len
+#define use_olz2(i) ((FutureState *)state)[i-in_offset].use_olz2
+#define olz_len2(i) ((FutureState *)state)[i-in_offset].olz_len2
 
-#define same(i) (((PastState *)state)[i].same)
-#define samelen(i) (((PastState *)state)[i].samelen)
-#define sorted_len(i) (((PastState *)state)[i].sorted_len)
-#define sorted_prev(i) (((PastState *)state)[i].sorted_prev)
-#define sorted_next(i) (((PastState *)state)[i].sorted_next)
+#define same(i) (((PastState *)past_state)[i].same)
+#define samelen(i) (((PastState *)past_state)[i].samelen)
+#define sorted_len(i) (((PastState *)past_state)[i].sorted_len)
+#define sorted_prev(i) (((PastState *)past_state)[i].sorted_prev)
+#define sorted_next(i) (((PastState *)past_state)[i].sorted_next)
+
+int in_offset = 0;
 
 static inline int price_offset(int num,int total) {
   if (total<=256) return 8;//top=0;
@@ -213,7 +217,7 @@ doneit:
   }
   if (obyte) {
     //printf("res=%d\n", res);
-    byte b=0;
+    uint8_t b=0;
     for(x=0;x<8;x++) {
       if (debug) printf("%d",bits[x]);
       if (bits[x]) b|=128>>x;
@@ -325,7 +329,7 @@ static inline void put_lz(int offset,int length,int used) {
   old_ofs=offset;
 }
 
-static inline void put_letter(byte b) {
+static inline void put_letter(uint8_t b) {
   if (flzlit) fprintf(flzlit,"%c",0);
   if (flit) fprintf(flit,"%c",b);
   putbit(0); bitslzlen++;
@@ -406,7 +410,7 @@ void init_same(int start, int n) {
   int gen_same[256*256+256];
 
   rle[n] = run_len = 0;
-  byte b = in_buf[n-1];
+  uint8_t b = in_buf[n-1];
   for(i=n-1;i>=0;i--) {
     if (in_buf[i]==b) 
       run_len++;
@@ -844,7 +848,7 @@ dolz:
 int main(int argc,char *argv[]) {
   FILE *ifd,*ofd;
   int n,i,bres,blz;
-  byte b;
+  uint8_t b;
 
   if (argc<3) {
     printf("usage: lzoma [OPTION] input output [lzlit lit olz len dist]\n\t-1 .. -9 Compression level\n");
@@ -863,7 +867,9 @@ int main(int argc,char *argv[]) {
   }
   in_buf = (void *)malloc(HISTORY_SIZE * sizeof(uint8_t));
   rle = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
-  state = (void *)malloc(HISTORY_SIZE * sizeof(FutureState));
+  sorted = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
+  state = (void *)malloc(BLOCK_SIZE * sizeof(FutureState));
+  past_state = (void *)malloc(HISTORY_SIZE * sizeof(PastState));
   int arg=1;
   int metalevel = 7;
   if (argv[arg][0]=='-') {
@@ -886,7 +892,6 @@ int main(int argc,char *argv[]) {
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
 
   n=0;
-  int in_offset = 0;
   for(;;) {
     if (n==0) {
       n=fread(in_buf,1,BLOCK_SIZE,ifd);
