@@ -996,7 +996,7 @@ int main(int argc,char *argv[]) {
   }
   if (verbose) printf("closing files let=%d lz=%d olz=%d\n",stlet,stlz,stolz);
   if (verbose) printf("bits lzlit=%d let=%d olz=%d match=%d len=%d\n",bitslzlen,bitslit,bitsolzlen,bitsdist,bitslen);
-  close(ifd);
-  close(ofd);
+  fclose(ifd);
+  fclose(ofd);
   return 0;
 }
