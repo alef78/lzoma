@@ -408,7 +408,7 @@ void init_same(int start, int n) {
   int gen_same[256*256+256];
 
   /*
-    Notes: the slowest parts here are RLCP array construction and divsufsort.
+    Notes: the slowest parts here are PLCP array construction and divsufsort.
     On slower levels -7 .. -9 it does not matter.
     But on fast levels -1..-3 (that still provide good compression),
     initialization takes about 20-30% processing time.
@@ -423,20 +423,31 @@ void init_same(int start, int n) {
   */
   for(i=0;i<256+256*256;i++) gen_same[i] =0;	// for bucketA & bucketB
   divsufsort(in_buf,sorted,gen_same,n);
-
   // reuse sorted_prev for temp buffer
-#define rank(i) sorted_prev(i)
+#define rank(i) rle[i]
   /* 
-   calculate rlcp in O(n) time
+   calculate plcp in O(n) time
    see http://www.cs.ucr.edu/~stelo/cpm/cpm09/04_karkk.pdf
    http://www.mi.fu-berlin.de/wiki/pub/ABI/Sequence_analysi_2013/2004_ManziniTwo_Space_Saving_Tricks_for_Linear_Time_LCP_Array_Computation.pdf
   */
-  for(i=0;i<=n-1;i++) rank(sorted[i]) = sorted[i-1];
+  for(i=1;i<=n-1;i++) rank(sorted[i]) = sorted[i-1];
+  rank(sorted[0]) = sorted[n-1];
+  
+  sorted_prev(sorted[0])=-1;
+  for(i=1;i<n;i++) sorted_prev(sorted[i])=sorted[i-1];
+
+  for(i=0;i<n-1;i++) sorted_next(sorted[i])=sorted[i+1];
+  sorted_next(sorted[n-1])=-1;
+  
   int h=0;
   for(i=0;i<=n-1;i++) {
     int j = rank(i);
     while(i+h<=n && j+h<=n && in_buf[i+h]==in_buf[j+h]) h++;
     sorted_len(i) = h;
+    if (h<=MINLZ) {
+      sorted_prev(i)=-1;
+      sorted_next(j)=-1;
+    }
     if(h>0) h--;
   }
 
@@ -463,11 +474,6 @@ void init_same(int start, int n) {
   }
   same(i)=-1;
 
-  sorted_prev(sorted[0])=-1;
-  for(i=1;i<n;i++) sorted_prev(sorted[i])=sorted_len(sorted[i]) > MINLZ? sorted[i-1]:-1;
-
-  for(i=0;i<n-1;i++) sorted_next(sorted[i])=sorted_len(sorted[i+1]) > MINLZ? sorted[i+1]:-1;
-  sorted_next(sorted[n-1])=-1;
   in_buf[n]=0;
 
   if (verbose) printf("init done.\n");
