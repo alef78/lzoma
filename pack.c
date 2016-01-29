@@ -55,6 +55,12 @@ FILE *flit=NULL;
 FILE *folz=NULL;
 FILE *flen=NULL;
 FILE *fdist=NULL;
+#ifdef EXPERIMENTS
+// this is for some experimention only.
+FILE *test=NULL;
+FILE *test2=NULL;
+FILE *test3=NULL;
+#endif
 
 uint32_t *rle;
 uint8_t *in_buf; /* text to be encoded */
@@ -286,6 +292,10 @@ static inline int min(int a,int b) {
 }
 
 static inline void put_lz(int offset,int length,int used) {
+#ifdef EXPERIMENTS
+  uint16_t code512 = 0x100;
+#endif
+
   if (flzlit) fprintf(flzlit,"%c",1);
   putbit(1); bitslzlen++;
   offset=-offset; /* 1.. */
@@ -293,8 +303,24 @@ static inline void put_lz(int offset,int length,int used) {
   if (was_letter) { bitsolzlen++;
     was_letter=0;
     if (old_ofs==offset) {
-    stolz++;
-    if (folz) fprintf(folz,"%c",0);
+      stolz++;
+      if (folz) fprintf(folz,"%c",0);
+
+#ifdef EXPERIMENTS
+// test combining everything into one model for simple entropy coding
+      code512 |= 0x80;
+      if (length-MINOLEN < 0x7F) {
+        code512 |= length-MINOLEN;
+      } else {
+        code512 |= 0x3F;
+        length-=MINOLEN+0x7F;
+        fwrite(&length, 4, 1, test2);
+        length+=MINOLEN+0x7F;
+      }
+      code512 = (code512 & 0xFF) << 8 | (code512>>8);
+      fwrite(&code512, 2, 1, test);
+#endif
+
       putbit(0);
       putenc_l(length-MINOLEN,breaklen);
       return;
@@ -320,6 +346,23 @@ static inline void put_lz(int offset,int length,int used) {
 #else
   if (offset+1>=longlen) { length--; }
   if (offset+1>=hugelen) { length--; }
+
+#ifdef EXPERIMENTS
+  if (length < 15) {
+    code512 |= length;
+  } else {
+    code512 |= 15;
+    length-=15;
+    fwrite(&length, 4, 1, test2);
+    length+=15;
+  }
+  code512 |= (offset & 0x7) << 4;
+  code512 = (code512 & 0xFF) << 8 | (code512>>8);
+  fwrite(&code512, 2, 1, test);
+  uint tmpofs = offset >> 4;
+  fwrite(&tmpofs, 4, 1, test3);
+#endif
+  
   putenc(offset,used,breaklz, 0);
   putenc_l(length-MINLZ+2,breaklen);
 #endif
@@ -328,6 +371,12 @@ static inline void put_lz(int offset,int length,int used) {
 }
 
 static inline void put_letter(uint8_t b) {
+#ifdef EXPERIMENTS
+  uint16_t code512 = b;
+  code512 = (code512 & 0xFF) << 8 | (code512>>8);
+  fwrite(&code512, 2, 1, test);
+#endif
+
   if (flzlit) fprintf(flzlit,"%c",0);
   if (flit) fprintf(flit,"%c",b);
   putbit(0); bitslzlen++;
@@ -925,6 +974,12 @@ int main(int argc,char *argv[]) {
   if (arg<argc) flen=fopen(argv[arg++],"wb");
   if (arg<argc) fdist=fopen(argv[arg++],"wb");
 
+#ifdef EXPERIMENTS
+  test=fopen("test","wb");
+  test2=fopen("test2","wb");
+  test3=fopen("test3","wb");
+#endif
+  
   int blocknum;
   uint32_t blk;
   for(blocknum=0;;blocknum++) {
@@ -998,5 +1053,12 @@ int main(int argc,char *argv[]) {
   if (verbose) printf("bits lzlit=%d let=%d olz=%d match=%d len=%d\n",bitslzlen,bitslit,bitsolzlen,bitsdist,bitslen);
   fclose(ifd);
   fclose(ofd);
+
+#ifdef EXPERIMENTS
+  fclose(test);
+  fclose(test2);
+  fclose(test3);
+#endif
+
   return 0;
 }
