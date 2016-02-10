@@ -66,7 +66,6 @@ getcode_doneit: \
 
 #define getlen(bits, src) {\
   long int res=0;\
-  int x=1;\
   \
   if (getbit==0) {\
     len+=getbit;\
@@ -74,12 +73,11 @@ getcode_doneit: \
   }\
   len+=2;\
   while (1) {  \
-    x+=x;\
     loadbit;\
     res+=res+getbit;\
     loadbit;\
     if (getbit==0) break;\
-    len+=x;\
+    res++;\
   }\
   len+=res;\
 getlen_0bit: ;\
