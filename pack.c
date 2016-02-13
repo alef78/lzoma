@@ -50,6 +50,8 @@ int level, short_match_level, match_level;
   };
 int verbose = 0;
 
+int dict_size, history_size, block_size;
+
 FILE *flzlit=NULL;
 FILE *flit=NULL;
 FILE *folz=NULL;
@@ -929,8 +931,10 @@ int main(int argc,char *argv[]) {
   uint8_t b;
 
   if (argc<3) {
+    // note: -d0 (32k history) does not work right now
     printf("usage: lzoma [OPTION] input output [lzlit lit olz len dist]\n"
-           "\t-1 .. -9 Compression level\n"
+           "\t-1 .. -9 Compression level (default 7)\n"
+           "\t-d[1..15] History size (default 9: 16M history; compression currently requires about 30x*history RAM)\n"
            "\t-v Be verbose\n"
            );
     printf("Notice: this program is at experimental stage of development. Compression format is not stable yet.\n");
@@ -946,24 +950,31 @@ int main(int argc,char *argv[]) {
     }
     exit(0);
   }
-  in_buf = (void *)malloc(HISTORY_SIZE * sizeof(uint8_t)+1);
-  rle = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
-  //sorted = (void *)malloc(HISTORY_SIZE * sizeof(uint32_t));
-  state = (void *)malloc(max(BLOCK_SIZE * sizeof(FutureState), HISTORY_SIZE * sizeof(uint32_t)));
-  past_state = (void *)malloc(HISTORY_SIZE * sizeof(PastState));
   int arg=1;
   int metalevel = 7;
-  while (argv[arg][0]=='-') {
+  int dict_size=9;
+  while (arg<argc && argv[arg][0]=='-') {
     if (argv[arg][1]>='1' && argv[arg][1]<='9')
       metalevel = argv[arg][1]-'0';
     if (argv[arg][1]=='v')
       verbose = 1;
+    if (argv[arg][1]=='d') {
+      dict_size = atoi(argv[arg]+2);
+      if (dict_size <1) dict_size=1; 
+      if (dict_size >15) dict_size=15; 
+    }
     arg++;
   }
+  history_size=HISTORY_SIZE(dict_size);
+  block_size=BLOCK_SIZE(dict_size);
   metalevel--;
   level=levels[metalevel][0];
   short_match_level=levels[metalevel][1];
   match_level=levels[metalevel][2];
+  in_buf = (void *)malloc(history_size * sizeof(uint8_t)+1);
+  rle = (void *)malloc(history_size * sizeof(uint32_t));
+  state = (void *)malloc(max(block_size * sizeof(FutureState), history_size * sizeof(uint32_t)));
+  past_state = (void *)malloc(history_size * sizeof(PastState));
   char *inf=argv[arg++];
   char *ouf=argv[arg++];
   ifd=fopen(inf,"rb");
@@ -983,11 +994,11 @@ int main(int argc,char *argv[]) {
   int blocknum;
   uint32_t blk;
   for(blocknum=0;;blocknum++) {
-    if (in_offset>HISTORY_SIZE-BLOCK_SIZE) {
-      memmove(in_buf, in_buf+BLOCK_SIZE, HISTORY_SIZE-BLOCK_SIZE);
-      in_offset -= BLOCK_SIZE;
+    if (in_offset>history_size-block_size) {
+      memmove(in_buf, in_buf+block_size, history_size-block_size);
+      in_offset -= block_size;
     }
-    n=fread(in_buf+in_offset,1,BLOCK_SIZE,ifd);
+    n=fread(in_buf+in_offset,1,block_size,ifd);
     if (n<=0) {
       blk = BLOCK_STORED | BLOCK_LAST;
       fwrite(&blk,4,1,ofd);
@@ -1023,15 +1034,14 @@ int main(int argc,char *argv[]) {
       header[5] = AlgoID[3];
       header[6] = Version;
       int flags=0;
-      int blocksize_id = 5;
-      header[7] = flags << 4 | blocksize_id; 
+      header[7] = flags << 4 | dict_size; 
       fwrite(header,8,1,ofd);
 
       bres=pack(1,n);
     } else { // next blocks
       bres=pack(in_offset,in_offset+n);
     }
-    uint32_t blk = (n < BLOCK_SIZE) ? BLOCK_LAST : 0;
+    uint32_t blk = (n < block_size) ? BLOCK_LAST : 0;
     if (bres==n) {
       blk |= BLOCK_STORED;
       blk |= n;

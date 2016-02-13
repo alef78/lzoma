@@ -83,15 +83,15 @@ getcode_doneit: \
 getlen_0bit: ;\
 }
 
-static void unpack_c(int history_size, uint8_t *src, uint8_t *dst, uint8_t *start, int left) {
+static void unpack_c(int current_history_size, int history_size, uint8_t *src, uint8_t *dst, uint8_t *start, int left) {
   int ofs=-1;
   int len;
   uint32_t bits=0x80000000;
   uint32_t resbits;
   left--;
-
-  if (history_size) {
-    history_size-=dst-start;
+  history_size--;// becomes mask for circular buffer indexing
+  if (current_history_size) {
+    current_history_size-=dst-start;
     goto nextblock;
   }
 
@@ -115,7 +115,7 @@ get_bit:
     }
   }
   len=2;
-  getcode(bits,src,dst-start+history_size);
+  getcode(bits,src,dst-start+current_history_size);
   ofs++;
   if (ofs>=longlen) len++;
   if (ofs>=hugelen) len++;
@@ -127,7 +127,7 @@ uselastofs:
   // Note: on some platforms memcpy may be faster here
   int ptr = dst-start+ofs;
   do {
-    *dst=start[ptr&(HISTORY_SIZE-1)];
+    *dst=start[ptr&(history_size)];
     ptr++;
     dst++;
   } while(--len);
@@ -161,8 +161,9 @@ int main(int argc,char * argv[]) {
     fprintf(stderr, "Unsupported compressed data format\n");
     return 1;
   }
-  int block_size = 32*1024 << (header[7] & 0xF);
-  int history_size = block_size << 4;
+  int dict_size = header[7] & 0xF;
+  int history_size = HISTORY_SIZE(dict_size);
+  int block_size = BLOCK_SIZE(dict_size);
   in_buf = (uint8_t *)malloc(block_size);
   out_buf = (uint8_t *)malloc(history_size); // history is 16*block_size
 
@@ -193,7 +194,7 @@ int main(int argc,char * argv[]) {
 #error Asm version not yet updated for recent format changes. Please use C version right now.
       unpack_x86(in_buf, out_buf, n_unp);
 #else
-      unpack_c(current_history, in_buf, out_buf+ofs, out_buf, n_unp);
+      unpack_c(current_history, history_size, in_buf, out_buf+ofs, out_buf, n_unp);
 #endif
       //tsc=(long unsigned)__rdtsc()-tsc;
       //printf("tsc=%lu\n",tsc);

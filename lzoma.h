@@ -5,9 +5,8 @@
 #define BLOCK_STORED 0x80000000
 #define BLOCK_LAST 0x40000000
 
-// TODO: these should become variables
-#define HISTORY_SIZE 16*1024*1024
-#define BLOCK_SIZE (HISTORY_SIZE >> 4)
+#define HISTORY_SIZE(dict_size) (32*1024<<dict_size)
+#define BLOCK_SIZE(dict_size) (HISTORY_SIZE(dict_size) >> 4)
 
 #define longlen 5400
 #define hugelen 0x060000
