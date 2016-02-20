@@ -16,4 +16,3 @@
 
 #define lzlow(total) ((total <= 400000) ? 60 :50)
 
-#define breaklen 4
