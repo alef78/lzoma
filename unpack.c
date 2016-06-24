@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <stdint.h>
 #include <string.h>
 //#include <x86intrin.h>
@@ -129,6 +131,12 @@ int main(int argc,char * argv[]) {
   int ifd,ofd;
   int n,n_unp;
   char shift;
+
+  if (argc<3) {
+    printf("usage: unpack input output\n  Unpacks file packed using lzoma algoritm\n");
+    printf("Notice: this program is at experimental stage of development. Compression format is not stable yet.\n");
+    exit(0);
+  }
 
   ifd=open(argv[1],O_RDONLY|O_BINARY);
   ofd=open(argv[2],O_WRONLY|O_TRUNC|O_CREAT|O_BINARY,511);

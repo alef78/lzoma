@@ -110,6 +110,23 @@ void *past_state;
 #define sorted_prev(i) (((PastState *)past_state)[i].sorted_prev)
 #define sorted_next(i) (((PastState *)past_state)[i].sorted_next)
 
+#ifdef _MSC_VER
+#include <intrin.h>
+uint32_t __inline __builtin_clz( uint32_t value )
+{
+    uint32_t leading_zero = 0;
+
+    if ( _BitScanReverse( &leading_zero, value ) )
+    {
+       return 31 - leading_zero;
+    }
+    else
+    {
+         return 32;
+    }
+}
+#endif
+
 int in_offset = 0;
 
 static inline int price_offset(int num,int total) {
@@ -289,8 +306,12 @@ void initout(int start) {
   was_letter=1;
 }
 
-static inline int min(int a,int b) {
+static inline int Min(int a,int b) {
   return a<b? a:b;
+}
+
+static inline int Max(int a,int b) {
+  return a>b? a:b;
 }
 
 static inline void put_lz(int offset,int length,int used) {
@@ -512,10 +533,6 @@ void init_same(int start, int n) {
   if (verbose) printf("init done.\n");
 }
 
-static inline int max(int a,int b) {
-  return a>b? a:b;
-}
-
 #define CHECK_REPLZ \
         int k;\
 	int jjj;\
@@ -617,7 +634,7 @@ int pack(int start, int n) {
     sorted_next(sorted_prev(n-1))=sorted_next(n-1);
   }
   if (sorted_next(n-1)>=0) {
-    sorted_len(sorted_next(n-1)) = min(sorted_len(sorted_next(n-1)),
+    sorted_len(sorted_next(n-1)) = Min(sorted_len(sorted_next(n-1)),
                                             sorted_len(n-1));
     sorted_prev(sorted_next(n-1))=sorted_prev(n-1);
   }
@@ -780,7 +797,7 @@ int pack(int start, int n) {
           CHECK_REPLZ
         }
         if (len>max_match) {
-          for(j=max(max_match+1,MINLZ+ll);j<=len;j++) {
+          for(j=Max(max_match+1,MINLZ+ll);j<=len;j++) {
             int tmp=pofs+price_lzlen(used-pos,j-MINLZ+2,used);
             tmp+=cache(used+j);
             if (tmp<res) {
@@ -809,13 +826,13 @@ int pack(int start, int n) {
       if (len_top>len_bottom) {
         pos=top;
 	len=len_top;
-        len_top = min(len_top,top >= 0 ? sorted_len(top):0);
+        len_top = Min(len_top,top >= 0 ? sorted_len(top):0);
 	top=sorted_prev(pos);
       } else {
         pos=bottom;
 	len=len_bottom;
 	bottom=sorted_next(pos);
-        len_bottom = min(len_bottom,bottom >= 0 ? sorted_len(bottom):0);
+        len_bottom = Min(len_bottom,bottom >= 0 ? sorted_len(bottom):0);
       }
       if (len<=MINLZ) goto done;
       if (len<=MINLZ+1 && used-pos>=hugelen) continue; // 
@@ -846,7 +863,7 @@ done:
       sorted_next(sorted_prev(used))=sorted_next(used);
     }
     if (sorted_next(used)>=0) {
-      sorted_len(sorted_next(used)) = min(sorted_len(sorted_next(used)),
+      sorted_len(sorted_next(used)) = Min(sorted_len(sorted_next(used)),
                                             sorted_len(used));
       sorted_prev(sorted_next(used))=sorted_prev(used);
     }
@@ -960,7 +977,7 @@ int main(int argc,char *argv[]) {
   match_level=levels[metalevel][2];
   in_buf = (void *)malloc(history_size * sizeof(uint8_t)+1);
   rle = (void *)malloc(history_size * sizeof(uint32_t));
-  state = (void *)malloc(max(block_size * sizeof(FutureState), history_size * sizeof(uint32_t)));
+  state = (void *)malloc(Max(block_size * sizeof(FutureState), history_size * sizeof(uint32_t)));
   past_state = (void *)malloc(history_size * sizeof(PastState));
   char *inf=argv[arg++];
   char *ouf=argv[arg++];

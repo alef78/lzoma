@@ -1,0 +1,9 @@
+To compile with MSVC:
+
+Open Developer Command Prompt and type:
+cl pack.c divsufsort.c
+cl unpack.c
+
+Note: MSVC support is currently untested, probably has bugs. Better use gcc or mingw if possible.
+
+
